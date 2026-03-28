@@ -108,9 +108,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }}>
         <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
           <Link href="/dashboard" style={{ textDecoration: 'none' }}>
-            <span style={{ fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em', color: '#111111', fontFamily: "'Inter', system-ui, sans-serif" }}>
-              HigherUp
-            </span>
+            <img src="/logo.png" alt="HigherUp" style={{ height: 26, width: 'auto', display: 'block' }} />
           </Link>
         </div>
 

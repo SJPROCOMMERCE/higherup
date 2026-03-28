@@ -49,10 +49,8 @@ export default function AdminLogin() {
 
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
-          <div style={{ fontSize: 32, fontWeight: 600, letterSpacing: '-0.02em', color: '#111111' }}>
-            HigherUp
-          </div>
-          <div style={{ fontSize: 14, color: '#CCCCCC', marginTop: 6 }}>Admin</div>
+          <img src="/logo.png" alt="HigherUp" style={{ height: 36, width: 'auto', display: 'block', margin: '0 auto' }} />
+          <div style={{ fontSize: 14, color: '#CCCCCC', marginTop: 10 }}>Admin</div>
         </div>
 
         {/* Username */}

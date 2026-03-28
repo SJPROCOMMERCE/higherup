@@ -95,9 +95,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', flex: 1, gap: 10 }}>
           <Link href="/admin/dashboard" style={{ textDecoration: 'none' }}>
-            <span style={{ fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em', color: '#FFFFFF', fontFamily: "'Inter', system-ui, sans-serif" }}>
-              HigherUp
-            </span>
+            <img src="/logo.png" alt="HigherUp" style={{ height: 26, width: 'auto', display: 'block', filter: 'brightness(0) invert(1)' }} />
           </Link>
           <span style={{ fontSize: 11, color: '#555555', fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Admin</span>
         </div>

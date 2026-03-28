@@ -15,8 +15,8 @@ function BlockedScreen() {
       background: '#FFFFFF', fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
     }}>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 32, fontWeight: 600, letterSpacing: '-0.02em', color: '#111111', marginBottom: 48 }}>
-          HigherUp
+        <div style={{ marginBottom: 48 }}>
+          <img src="/logo.png" alt="HigherUp" style={{ height: 36, width: 'auto', display: 'block', margin: '0 auto' }} />
         </div>
         <div style={{ fontSize: 16, fontWeight: 300, color: '#111111', marginBottom: 10 }}>
           Your account is no longer active.
@@ -160,9 +160,7 @@ export default function LoginPage() {
 
         {/* ── Logo ── */}
         <div style={{ marginBottom: 64 }}>
-          <span style={{ fontSize: 32, fontWeight: 600, letterSpacing: '-0.02em', color: '#111111' }}>
-            HigherUp
-          </span>
+          <img src="/logo.png" alt="HigherUp" style={{ height: 36, width: 'auto', display: 'block', margin: '0 auto' }} />
         </div>
 
         {/* ── Six digit boxes ── */}

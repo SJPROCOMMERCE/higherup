@@ -16,8 +16,9 @@ function InvalidInvite({ reason }: { reason: InviteReason }) {
       background: '#FFFFFF', fontFamily: "'Inter', system-ui, sans-serif",
     }}>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 32, fontWeight: 600, letterSpacing: '-0.02em', color: '#111111', marginBottom: 40 }}>
-          HigherUp
+        <div style={{ marginBottom: 40 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="HigherUp" style={{ height: 36, width: 'auto', display: 'block', margin: '0 auto' }} />
         </div>
         <div style={{ fontSize: 16, fontWeight: 300, color: '#111111' }}>
           {messages[reason]}

@@ -533,9 +533,7 @@ export function OnboardingForm({ token: _token, inviteId }: { token: string; inv
         height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center',
         flexShrink: 0, borderBottom: `1px solid ${C.border}`,
       }}>
-        <span style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em', color: C.black }}>
-          HigherUp
-        </span>
+        <img src="/logo.png" alt="HigherUp" style={{ height: 28, width: 'auto', display: 'block' }} />
       </div>
 
       {/* Content — key={step} forces full remount on every step change */}

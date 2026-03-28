@@ -76,7 +76,8 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(sips -g pixelWidth -g pixelHeight /Users/safouaneelajjouri/Documents/HigherUp/public/logo.png)"
     ]
   }
 }

@@ -122,9 +122,7 @@ export default function WaitlistPage() {
 
         {/* Logo */}
         <div style={{ marginBottom: 40 }}>
-          <span style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-0.02em', color: T.black, fontFamily: "'Inter', system-ui, sans-serif" }}>
-            HigherUp
-          </span>
+          <img src="/logo.png" alt="HigherUp" style={{ height: 34, width: 'auto', display: 'block', margin: '0 auto' }} />
         </div>
 
         {/* Heading */}
