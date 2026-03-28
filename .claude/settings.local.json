@@ -72,7 +72,11 @@
       "Bash(python3 -m json.tool __NEW_LINE_0cb612376b009043__ echo \"\" echo \"=== JOHN''''s VA ID ===\" curl -s \"$URL/rest/v1/vas?select=id,name&name=ilike.*John*\" -H \"apikey: $KEY\" -H \"Authorization: Bearer $KEY\")",
       "Bash(grep -rn process.env. --include=*.tsx --include=*.ts app/ lib/ components/)",
       "Bash(grep -rn \"localhost\\\\|127\\\\.0\\\\.0\\\\.1\" --include=*.tsx --include=*.ts --include=*.json app/ lib/ components/)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git rm:*)"
     ]
   }
 }
