@@ -528,7 +528,7 @@ export default function AdminVAsPage() {
     setInviteError(null)
     try {
       const { link } = await createInvite(inviteNote.trim() || undefined, 'admin')
-      setInviteLink(link)
+      setInviteLink(`${window.location.origin}${link}`)
       void loadInvites()
     } catch (err) {
       setInviteError(err instanceof Error ? err.message : 'Failed to create invite')
@@ -1535,7 +1535,7 @@ export default function AdminVAsPage() {
                       const expired = !inv.used && !inv.revoked && new Date(inv.expires_at) < new Date()
                       const status  = inv.revoked ? 'revoked' : inv.used ? 'used' : expired ? 'expired' : 'active'
                       const dot     = status === 'active' ? '#00A550' : status === 'used' ? '#999' : '#CC3300'
-                      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.higherup.io'
+                      const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
                       const link    = `${baseUrl}/join/${inv.token}`
                       return (
                         <div key={inv.id} style={{

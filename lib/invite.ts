@@ -26,8 +26,9 @@ export async function createInvite(
 
   if (error || !data) throw new Error(error?.message ?? 'Failed to create invite')
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-  const link    = `${baseUrl}/join/${token}`
+  // link is built client-side using window.location.origin so it always
+  // reflects the actual domain the admin is on (higherup.me, localhost, etc.)
+  const link = `/join/${token}`
   return { token, link, id: data.id as string }
 }
 
