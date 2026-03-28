@@ -67,8 +67,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       .then(({ count }) => setMsgCount(count ?? 0))
   }, [pathname])
 
-  // Entry page — no nav
-  if (pathname === '/admin') {
+  // Login + entry page — no nav
+  if (pathname === '/admin' || pathname === '/admin/login') {
     return (
       <div style={{ minHeight: '100vh', background: '#FFFFFF', fontFamily: "'Inter', system-ui, sans-serif" }}>
         {children}
@@ -142,17 +142,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         {/* Right */}
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16 }}>
-          <span style={{ fontSize: 12, color: '#666666' }}>Admin</span>
           <button
-            onClick={() => router.push('/')}
+            onClick={async () => {
+              await fetch('/api/admin/logout', { method: 'POST' })
+              router.push('/admin/login')
+            }}
             style={{
-              fontSize: 11, color: '#666666', background: 'none', border: 'none',
+              fontSize: 13, color: '#999999', background: 'none', border: 'none',
               cursor: 'pointer', padding: 0, transition: 'color 0.15s',
             }}
             onMouseEnter={e => e.currentTarget.style.color = '#FFFFFF'}
-            onMouseLeave={e => e.currentTarget.style.color = '#666666'}
+            onMouseLeave={e => e.currentTarget.style.color = '#999999'}
           >
-            Exit admin
+            Sign out
           </button>
         </div>
       </header>
