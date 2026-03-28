@@ -1,0 +1,841 @@
+'use client'
+
+import { useEffect, useRef, useState, useCallback } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useVA } from '@/context/va-context'
+import { supabase } from '@/lib/supabase'
+import { logActivity } from '@/lib/activity-log'
+
+// ─── Design tokens ────────────────────────────────────────────────────────────
+
+const T = {
+  black:   '#111111',
+  sec:     '#999999',
+  ter:     '#CCCCCC',
+  ghost:   '#DDDDDD',
+  div:     '#EEEEEE',
+  err:     '#999999',
+}
+
+// ─── Option data ──────────────────────────────────────────────────────────────
+
+const NICHES = [
+  { label: 'Fashion',          value: 'fashion' },
+  { label: 'Electronics',      value: 'electronics' },
+  { label: 'Home & Garden',    value: 'home_garden' },
+  { label: 'Beauty',           value: 'beauty' },
+  { label: 'Health & Fitness', value: 'health' },
+  { label: 'Sports',           value: 'sports' },
+  { label: 'Other',            value: 'other' },
+]
+
+const LANGUAGES = [
+  { label: 'English',    value: 'english'    },
+  { label: 'German',     value: 'german'     },
+  { label: 'French',     value: 'french'     },
+  { label: 'Dutch',      value: 'dutch'      },
+  { label: 'Spanish',    value: 'spanish'    },
+  { label: 'Polish',     value: 'polish'     },
+  { label: 'Portuguese', value: 'portuguese' },
+  { label: 'Italian',    value: 'italian'    },
+  { label: 'Swedish',    value: 'swedish'    },
+  { label: 'Danish',     value: 'danish'     },
+  { label: 'Norwegian',  value: 'norwegian'  },
+  { label: 'Other',      value: 'other'      },
+]
+
+const TITLE_PREFS = [
+  { label: 'Short',  value: 'short' },
+  { label: 'Medium', value: 'medium' },
+  { label: 'Long',   value: 'long' },
+]
+
+const DESC_STYLES = [
+  { label: 'Emotional', value: 'emotional' },
+  { label: 'Technical', value: 'technical' },
+  { label: 'Casual',    value: 'casual' },
+  { label: 'Luxury',    value: 'luxury' },
+  { label: 'Neutral',   value: 'neutral' },
+]
+
+const MARKETS = [
+  'United States', 'United Kingdom', 'Germany', 'Netherlands', 'France',
+  'Spain', 'Italy', 'Belgium', 'Austria', 'Switzerland', 'Sweden', 'Denmark',
+  'Norway', 'Finland', 'Poland', 'Portugal', 'Ireland', 'Canada', 'Australia',
+  'New Zealand', 'Japan', 'South Korea', 'Singapore', 'United Arab Emirates',
+  'Saudi Arabia', 'Brazil', 'Mexico', 'Other',
+].map(m => ({ label: m, value: m }))
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function todayString() {
+  return new Date().toISOString().split('T')[0]
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function FieldLabel({ label, optional }: { label: string; optional?: boolean }) {
+  return (
+    <div style={{ fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.1em', color: T.ter, marginBottom: 6 }}>
+      {label}
+      {optional && <span style={{ color: T.ghost, marginLeft: 6, letterSpacing: 0, textTransform: 'none', fontSize: 10, fontWeight: 400 }}>(optional)</span>}
+    </div>
+  )
+}
+
+function FieldError({ msg }: { msg?: string }) {
+  if (!msg) return null
+  return <div style={{ fontSize: 11, color: T.err, marginTop: 6 }}>{msg}</div>
+}
+
+function FieldHint({ msg }: { msg: string }) {
+  return <div style={{ fontSize: 11, color: T.ghost, marginTop: 6 }}>{msg}</div>
+}
+
+const inputBase = (hasError?: boolean, focused?: boolean): React.CSSProperties => ({
+  width: '100%', fontSize: 15, fontWeight: 400, color: T.black,
+  background: 'none', border: 'none', outline: 'none',
+  borderBottom: `1.5px solid ${focused ? T.black : hasError ? T.err : T.div}`,
+  padding: '10px 0', fontFamily: 'inherit', transition: 'border-color 0.15s',
+})
+
+// ─── Text Input ───────────────────────────────────────────────────────────────
+
+function TextInput({
+  value, onChange, onBlur, placeholder, type, hasError,
+}: {
+  value: string
+  onChange: (v: string) => void
+  onBlur?: () => void
+  placeholder?: string
+  type?: string
+  hasError?: boolean
+}) {
+  const [focused, setFocused] = useState(false)
+  return (
+    <input
+      type={type ?? 'text'}
+      value={value}
+      placeholder={placeholder}
+      onChange={e => onChange(e.target.value)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => { setFocused(false); onBlur?.() }}
+      style={{ ...inputBase(hasError, focused), display: 'block' }}
+    />
+  )
+}
+
+// ─── Number Input ─────────────────────────────────────────────────────────────
+
+function NumberInput({
+  value, onChange, placeholder, hasError,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  hasError?: boolean
+}) {
+  const [focused, setFocused] = useState(false)
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      value={value}
+      placeholder={placeholder}
+      onChange={e => { const v = e.target.value; if (v === '' || /^\d+$/.test(v)) onChange(v) }}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{ ...inputBase(hasError, focused), display: 'block' }}
+    />
+  )
+}
+
+// ─── Date Input ───────────────────────────────────────────────────────────────
+
+function DateInput({
+  value, onChange, hasError,
+}: {
+  value: string
+  onChange: (v: string) => void
+  hasError?: boolean
+}) {
+  const [focused, setFocused] = useState(false)
+  return (
+    <input
+      type="date"
+      min={todayString()}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{ ...inputBase(hasError, focused), display: 'block', colorScheme: 'light' }}
+    />
+  )
+}
+
+// ─── Textarea ─────────────────────────────────────────────────────────────────
+
+function TextArea({
+  value, onChange, placeholder,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+}) {
+  const [focused, setFocused] = useState(false)
+  return (
+    <textarea
+      value={value}
+      placeholder={placeholder}
+      rows={3}
+      onChange={e => onChange(e.target.value)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{
+        ...inputBase(false, focused),
+        display: 'block', resize: 'vertical', minHeight: 80,
+        paddingTop: 10,
+      }}
+    />
+  )
+}
+
+// ─── Custom Dropdown ──────────────────────────────────────────────────────────
+
+function CustomDropdown({
+  options, value, onChange, placeholder, hasError,
+}: {
+  options: { label: string; value: string }[]
+  value: string
+  onChange: (v: string) => void
+  placeholder: string
+  hasError?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [focused, setFocused] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const selected = options.find(o => o.value === value)
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false); setFocused(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  useEffect(() => {
+    function handler(e: KeyboardEvent) {
+      if (e.key === 'Escape') { setOpen(false); setFocused(false) }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [])
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <div
+        tabIndex={0}
+        onClick={() => { setOpen(!open); setFocused(true) }}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setOpen(!open) }}
+        style={{
+          ...inputBase(hasError, open || focused),
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          cursor: 'pointer', userSelect: 'none',
+          color: selected ? T.black : T.ghost,
+        }}
+      >
+        <span>{selected?.label ?? placeholder}</span>
+        <span style={{ color: T.ter, fontSize: 9, marginLeft: 8 }}>{open ? '▲' : '▼'}</span>
+      </div>
+      {open && (
+        <div className="hu-dropdown-list" style={{ top: '100%', left: 0, right: 0, maxHeight: 200, overflowY: 'auto' }}>
+          {options.map(o => (
+            <div
+              key={o.value}
+              className={`hu-dropdown-option${o.value === value ? ' is-selected' : ''}`}
+              onClick={() => { onChange(o.value); setOpen(false); setFocused(false) }}
+              style={{ padding: '10px 12px', fontSize: 14, fontWeight: o.value === value ? 500 : 400, color: T.black }}
+            >
+              {o.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Searchable Dropdown ──────────────────────────────────────────────────────
+
+function SearchableDropdown({
+  options, value, onChange, placeholder, hasError,
+}: {
+  options: { label: string; value: string }[]
+  value: string
+  onChange: (v: string) => void
+  placeholder: string
+  hasError?: boolean
+}) {
+  const [open,    setOpen]    = useState(false)
+  const [query,   setQuery]   = useState('')
+  const [focused, setFocused] = useState(false)
+  const ref       = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+  const selected  = options.find(o => o.value === value)
+  const filtered  = options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()))
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false); setFocused(false); setQuery('')
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  useEffect(() => {
+    function handler(e: KeyboardEvent) {
+      if (e.key === 'Escape') { setOpen(false); setFocused(false); setQuery('') }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [])
+
+  useEffect(() => {
+    if (open) setTimeout(() => searchRef.current?.focus(), 10)
+  }, [open])
+
+  function handleOpen() {
+    setOpen(!open)
+    setFocused(true)
+    setQuery('')
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      {/* Trigger */}
+      <div
+        tabIndex={0}
+        onClick={handleOpen}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleOpen() }}
+        style={{
+          ...inputBase(hasError, open || focused),
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          cursor: 'pointer', userSelect: 'none',
+          color: selected ? T.black : T.ghost,
+        }}
+      >
+        <span>{selected?.label ?? placeholder}</span>
+        <span style={{ color: T.ter, fontSize: 9, marginLeft: 8 }}>{open ? '▲' : '▼'}</span>
+      </div>
+
+      {/* Dropdown */}
+      {open && (
+        <div className="hu-dropdown-list" style={{ top: '100%', left: 0, right: 0 }}>
+          {/* Search input */}
+          <div style={{ padding: '8px 12px', borderBottom: `1px solid ${T.div}` }}>
+            <input
+              ref={searchRef}
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search..."
+              style={{
+                width: '100%', fontSize: 13, color: T.black,
+                background: 'none', border: 'none', outline: 'none',
+                fontFamily: 'inherit',
+              }}
+            />
+          </div>
+          {/* Options */}
+          <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+            {filtered.length === 0 ? (
+              <div style={{ padding: '10px 12px', fontSize: 13, color: T.ter }}>No results</div>
+            ) : (
+              filtered.map(o => (
+                <div
+                  key={o.value}
+                  className={`hu-dropdown-option${o.value === value ? ' is-selected' : ''}`}
+                  onClick={() => { onChange(o.value); setOpen(false); setFocused(false); setQuery('') }}
+                  style={{ padding: '10px 12px', fontSize: 14, fontWeight: o.value === value ? 500 : 400, color: T.black }}
+                >
+                  {o.label}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Pill Toggle ──────────────────────────────────────────────────────────────
+
+function PillToggle({
+  options, value, onChange,
+}: {
+  options: { label: string; value: string }[]
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+      {options.map(o => {
+        const sel = o.value === value
+        return (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            style={{
+              fontSize: 12, padding: '6px 16px', borderRadius: 100,
+              border: `1px solid ${sel ? T.black : T.div}`,
+              background: sel ? T.black : '#FFFFFF',
+              color: sel ? '#FFFFFF' : T.ter,
+              cursor: 'pointer', fontFamily: 'inherit',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => { if (!sel) { e.currentTarget.style.borderColor = T.ter; e.currentTarget.style.color = T.sec } }}
+            onMouseLeave={e => { if (!sel) { e.currentTarget.style.borderColor = T.div; e.currentTarget.style.color = T.ter } }}
+          >
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Custom Checkbox ──────────────────────────────────────────────────────────
+
+function CustomCheckbox({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div
+      role="checkbox"
+      aria-checked={checked}
+      tabIndex={0}
+      onClick={() => onChange(!checked)}
+      onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); onChange(!checked) } }}
+      style={{
+        width: 16, height: 16, flexShrink: 0,
+        border: `1.5px solid ${checked ? T.black : T.ghost}`,
+        borderRadius: 2, background: checked ? T.black : '#FFFFFF',
+        cursor: 'pointer', display: 'flex', alignItems: 'center',
+        justifyContent: 'center', transition: 'all 0.15s',
+      }}
+    >
+      {checked && (
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      )}
+    </div>
+  )
+}
+
+// ─── Validation ───────────────────────────────────────────────────────────────
+
+type FormState = {
+  store_name: string
+  store_domain: string
+  niche: string
+  market: string
+  market_other: string
+  language: string
+  expected_monthly_products: string
+  va_rate_per_product: string
+  title_preference: string
+  description_style: string
+  payment_method: string
+  start_date: string
+  special_instructions: string
+}
+
+function validate(form: FormState): Record<string, string> {
+  const e: Record<string, string> = {}
+  if (!form.store_name.trim() || form.store_name.trim().length < 2) e.store_name = 'Store name is required'
+  if (!form.niche) e.niche = 'Please select a niche'
+  if (!form.market) e.market = 'Market is required'
+  else if (form.market === 'Other' && !form.market_other.trim()) e.market = 'Please specify your market'
+  if (!form.language) e.language = 'Please select a language'
+  const n = Number(form.expected_monthly_products)
+  if (!form.expected_monthly_products || isNaN(n) || n <= 0) e.expected_monthly_products = 'Enter a valid number'
+  if (!form.title_preference) e.title_preference = 'Select a title preference'
+  if (!form.description_style) e.description_style = 'Select a description style'
+  if (!form.start_date) {
+    e.start_date = 'Start date must be today or later'
+  } else {
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const sel = new Date(form.start_date + 'T00:00:00')
+    if (sel < today) e.start_date = 'Start date must be today or later'
+  }
+  return e
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+export default function NewClientPage() {
+  const router   = useRouter()
+  const { currentVA } = useVA()
+
+  const [form, setForm] = useState<FormState>({
+    store_name: '', store_domain: '', niche: '', market: '', market_other: '',
+    language: '', expected_monthly_products: '', va_rate_per_product: '',
+    title_preference: '', description_style: '', payment_method: '',
+    start_date: '', special_instructions: '',
+  })
+
+  const [confirmed,       setConfirmed]      = useState(false)
+  const [hasTriedSubmit,  setHasTriedSubmit]  = useState(false)
+  const [errors,          setErrors]          = useState<Record<string, string>>({})
+  const [duplicateError,  setDuplicateError]  = useState(false)
+  const [submitting,      setSubmitting]      = useState(false)
+  const [submitError,     setSubmitError]     = useState(false)
+  const [success,         setSuccess]         = useState(false)
+
+  // Live validation after first submit attempt
+  useEffect(() => {
+    if (hasTriedSubmit) setErrors(validate(form))
+  }, [form, hasTriedSubmit])
+
+  // Duplicate check on blur
+  const checkDuplicate = useCallback(async () => {
+    if (!form.store_name.trim() || !currentVA) return
+    const { data } = await supabase
+      .from('clients')
+      .select('id')
+      .eq('va_id', currentVA.id)
+      .ilike('store_name', form.store_name.trim())
+      .maybeSingle()
+    setDuplicateError(!!data)
+  }, [form.store_name, currentVA])
+
+  function set(key: keyof FormState) {
+    return (val: string) => setForm(prev => ({ ...prev, [key]: val }))
+  }
+
+  const currentErrors = hasTriedSubmit ? errors : {}
+  const hasErrors     = Object.keys(currentErrors).length > 0 || duplicateError
+  const submitDisabled = !confirmed || hasErrors || submitting
+
+  async function handleSubmit() {
+    setHasTriedSubmit(true)
+    const errs = validate(form)
+    setErrors(errs)
+    if (Object.keys(errs).length > 0 || duplicateError || !currentVA) return
+
+    setSubmitting(true); setSubmitError(false)
+
+    const specialParts = [
+      form.payment_method?.trim() ? `Payment method: ${form.payment_method.trim()}` : '',
+      form.special_instructions?.trim(),
+    ].filter(Boolean).join('\n\n')
+
+    const { error } = await supabase.from('clients').insert({
+      va_id:                    currentVA.id,
+      store_name:               form.store_name.trim(),
+      store_domain:             form.store_domain.trim() || null,
+      niche:                    form.niche || null,
+      market:                   form.market === 'Other' ? (form.market_other.trim() || 'Other') : (form.market || null),
+      language:                 form.language || null,
+      expected_monthly_products: parseInt(form.expected_monthly_products) || null,
+      va_rate_per_product:      form.va_rate_per_product ? (parseFloat(form.va_rate_per_product) || null) : null,
+      title_preference:         form.title_preference || null,
+      description_style:        form.description_style || null,
+      special_instructions:     specialParts || null,
+      approval_status:          'pending',
+      is_active:                true,
+      deadline_48h:             form.start_date ? new Date(form.start_date + 'T00:00:00').toISOString() : null,
+    })
+
+    setSubmitting(false)
+    if (error) { setSubmitError(true); return }
+    void logActivity({
+      action: 'client_registered',
+      va_id: currentVA.id,
+      source: 'va',
+      details: `New client registered: ${form.store_name}`,
+    })
+    setSuccess(true)
+  }
+
+  if (!currentVA) return null
+
+  // ── Success state ─────────────────────────────────────────────────────────
+  if (success) {
+    return (
+      <div style={{ paddingTop: 64, paddingBottom: 80, maxWidth: 580, margin: '0 auto', paddingInline: 48, textAlign: 'center', fontFamily: "'Inter', system-ui, sans-serif" }}>
+        <div className="s1">
+          <div style={{ fontSize: 24, fontWeight: 300, color: T.black, marginBottom: 8 }}>Client registered</div>
+          <div style={{ fontSize: 13, color: T.ter, marginBottom: 24 }}>{form.store_name} is pending approval.</div>
+          <Link
+            href="/dashboard"
+            style={{ fontSize: 12, color: T.ter, textDecoration: 'underline', textDecorationColor: 'transparent', transition: 'color 0.15s, text-decoration-color 0.15s' }}
+            onMouseEnter={e => { e.currentTarget.style.color = T.black; e.currentTarget.style.textDecorationColor = T.black }}
+            onMouseLeave={e => { e.currentTarget.style.color = T.ter;   e.currentTarget.style.textDecorationColor = 'transparent' }}
+          >
+            Back to overview
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Form ─────────────────────────────────────────────────────────────────
+  const wrap  = { marginBottom: 28 } as React.CSSProperties
+  const outer = { paddingTop: 64, paddingBottom: 80, maxWidth: 580, margin: '0 auto', paddingInline: 48, fontFamily: "'Inter', system-ui, sans-serif" } as React.CSSProperties
+
+  return (
+    <div style={outer} className="content-pad">
+
+      {/* Back link */}
+      <div className="s1" style={{ marginBottom: 40 }}>
+        <Link
+          href="/dashboard"
+          style={{ fontSize: 12, color: T.ter, textDecoration: 'none', transition: 'color 0.15s' }}
+          onMouseEnter={e => e.currentTarget.style.color = T.black}
+          onMouseLeave={e => e.currentTarget.style.color = T.ter}
+        >← Back to overview</Link>
+      </div>
+
+      {/* Header */}
+      <div className="s2" style={{ textAlign: 'center', marginBottom: 48 }}>
+        <div style={{ fontSize: 28, fontWeight: 300, color: T.black, marginBottom: 8 }}>Register new client</div>
+        <div style={{ fontSize: 13, color: T.ter }}>Fill in the details below. We&apos;ll review and approve within 12 hours.</div>
+      </div>
+
+      {/* ── Fields ───────────────────────────────────────────── */}
+
+      {/* 1. Store Name */}
+      <div className="s3" style={wrap}>
+        <FieldLabel label="Store Name" />
+        <TextInput
+          value={form.store_name}
+          onChange={set('store_name')}
+          onBlur={checkDuplicate}
+          placeholder="e.g. StyleDrop EU"
+          hasError={!!currentErrors.store_name || duplicateError}
+        />
+        {duplicateError && <FieldError msg="You already have a client with this name" />}
+        {!duplicateError && <FieldError msg={currentErrors.store_name} />}
+      </div>
+
+      {/* 2. Store Domain */}
+      <div className="s3" style={wrap}>
+        <FieldLabel label="Store Domain" optional />
+        <TextInput
+          value={form.store_domain}
+          onChange={set('store_domain')}
+          placeholder="e.g. styledrop.de"
+        />
+      </div>
+
+      {/* 3. Niche */}
+      <div className="s3" style={wrap}>
+        <FieldLabel label="Niche" />
+        <CustomDropdown
+          options={NICHES}
+          value={form.niche}
+          onChange={set('niche')}
+          placeholder="Select niche"
+          hasError={!!currentErrors.niche}
+        />
+        <FieldError msg={currentErrors.niche} />
+      </div>
+
+      {/* 4. Market */}
+      <div className="s3" style={wrap}>
+        <FieldLabel label="Market" />
+        <SearchableDropdown
+          options={MARKETS}
+          value={form.market}
+          onChange={set('market')}
+          placeholder="Select market"
+          hasError={!!currentErrors.market}
+        />
+        {form.market === 'Other' && (
+          <div style={{ marginTop: 12 }}>
+            <TextInput
+              value={form.market_other}
+              onChange={set('market_other')}
+              placeholder="Specify market"
+              hasError={!!currentErrors.market}
+            />
+          </div>
+        )}
+        <FieldError msg={currentErrors.market} />
+      </div>
+
+      {/* 5. Language */}
+      <div className="s4" style={wrap}>
+        <FieldLabel label="Language" />
+        <CustomDropdown
+          options={LANGUAGES}
+          value={form.language}
+          onChange={set('language')}
+          placeholder="Select language"
+          hasError={!!currentErrors.language}
+        />
+        <FieldError msg={currentErrors.language} />
+      </div>
+
+      {/* 6. Expected Monthly Products */}
+      <div className="s4" style={wrap}>
+        <FieldLabel label="Expected Monthly Products" />
+        <NumberInput
+          value={form.expected_monthly_products}
+          onChange={set('expected_monthly_products')}
+          placeholder="e.g. 200"
+          hasError={!!currentErrors.expected_monthly_products}
+        />
+        <FieldError msg={currentErrors.expected_monthly_products} />
+        {!currentErrors.expected_monthly_products && <FieldHint msg="This helps us estimate your tier" />}
+      </div>
+
+      {/* 6b. Your Rate Per Product */}
+      <div className="s4" style={wrap}>
+        <FieldLabel label="Your Rate Per Product" optional />
+        <div
+          style={{ display: 'flex', alignItems: 'center', borderBottom: '1.5px solid #EEEEEE', transition: 'border-color 0.15s' }}
+          onFocusCapture={e => (e.currentTarget.style.borderBottomColor = T.black)}
+          onBlurCapture={e => (e.currentTarget.style.borderBottomColor = '#EEEEEE')}
+        >
+          <span style={{ fontSize: 15, color: T.ter, paddingRight: 6 }}>$</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={form.va_rate_per_product}
+            placeholder="0.65"
+            onChange={e => { const v = e.target.value; if (v === '' || /^\d*\.?\d*$/.test(v)) set('va_rate_per_product')(v) }}
+            style={{
+              flex: 1, fontSize: 15, color: T.black,
+              background: 'none', border: 'none', outline: 'none',
+              padding: '10px 0', fontFamily: 'inherit',
+            }}
+          />
+        </div>
+        <FieldHint msg="What do you charge this client per product?" />
+        {!form.va_rate_per_product && (
+          <div style={{ fontSize: 11, color: T.ghost, marginTop: 4 }}>
+            You can set this later, but we recommend setting it now to track your earnings.
+          </div>
+        )}
+      </div>
+
+      {/* 7. Title Preference */}
+      <div className="s4" style={wrap}>
+        <FieldLabel label="Title Preference" />
+        <div style={{ paddingTop: 4 }}>
+          <PillToggle options={TITLE_PREFS} value={form.title_preference} onChange={set('title_preference')} />
+        </div>
+        <FieldError msg={currentErrors.title_preference} />
+      </div>
+
+      {/* 8. Description Style */}
+      <div className="s5" style={wrap}>
+        <FieldLabel label="Description Style" />
+        <div style={{ paddingTop: 4 }}>
+          <PillToggle options={DESC_STYLES} value={form.description_style} onChange={set('description_style')} />
+        </div>
+        <FieldError msg={currentErrors.description_style} />
+      </div>
+
+      {/* 9. Payment Method */}
+      <div className="s5" style={wrap}>
+        <FieldLabel label="Your Payment Method With This Client" optional />
+        <TextInput
+          value={form.payment_method}
+          onChange={set('payment_method')}
+          placeholder="e.g. Upwork, PayPal, direct transfer"
+        />
+      </div>
+
+      {/* 10. Start Date */}
+      <div className="s5" style={wrap}>
+        <FieldLabel label="Official Start Date" />
+        <DateInput
+          value={form.start_date}
+          onChange={set('start_date')}
+          hasError={!!currentErrors.start_date}
+        />
+        <FieldError msg={currentErrors.start_date} />
+        {!currentErrors.start_date && <FieldHint msg="You must upload within 48 hours after approval" />}
+      </div>
+
+      {/* 11. Special Instructions */}
+      <div className="s6" style={{ marginBottom: 32 }}>
+        <FieldLabel label="Special Instructions" optional />
+        <TextArea
+          value={form.special_instructions}
+          onChange={set('special_instructions')}
+          placeholder="Any specific requirements from this client..."
+        />
+      </div>
+
+      {/* ── 48h Confirmation ─────────────────────────────────── */}
+      <div className="s6" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 32 }}>
+        <CustomCheckbox checked={confirmed} onChange={setConfirmed} />
+        <span style={{ fontSize: 12, color: T.sec, lineHeight: 1.5, paddingTop: 1 }}>
+          I confirm that I will start serving this client within 48 hours of approval.
+        </span>
+      </div>
+
+      {/* ── Submit ───────────────────────────────────────────── */}
+      <div className="s7" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={submitDisabled}
+          style={{
+            fontSize: 13, fontWeight: 500,
+            padding: '14px 36px', borderRadius: 100, border: 'none',
+            background: submitDisabled ? '#EEEEEE' : T.black,
+            color: submitDisabled ? T.ter : '#FFFFFF',
+            cursor: submitDisabled ? 'not-allowed' : 'pointer',
+            fontFamily: 'inherit',
+            opacity: submitting ? 0.6 : 1,
+            animation: submitting ? 'pulse 1.5s ease infinite' : 'none',
+            transition: 'background 0.15s, transform 0.15s, box-shadow 0.15s',
+          }}
+          onMouseEnter={e => {
+            if (!submitDisabled) {
+              e.currentTarget.style.background = '#333333'
+              e.currentTarget.style.transform = 'translateY(-1px)'
+              e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
+            }
+          }}
+          onMouseLeave={e => {
+            if (!submitDisabled) {
+              e.currentTarget.style.background = T.black
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = 'none'
+            }
+          }}
+        >
+          {submitting ? 'Submitting...' : 'Submit for review'}
+        </button>
+
+        {submitError && (
+          <div style={{ fontSize: 12, color: T.sec }}>
+            Something went wrong.{' '}
+            <button
+              onClick={handleSubmit}
+              style={{ fontSize: 12, color: T.black, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline', fontFamily: 'inherit' }}
+            >Try again</button>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div style={{ marginTop: 80, textAlign: 'center' }}>
+        <span style={{ fontSize: 10, color: '#E8E8E8', letterSpacing: '0.05em' }}>HIGHERUP</span>
+      </div>
+    </div>
+  )
+}

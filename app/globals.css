@@ -1,26 +1,95 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+* { box-sizing: border-box; }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: #ffffff;
+  color: #111111;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Keyframes ───────────────────────────────────────────── */
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+/* ─── Animation utilities ─────────────────────────────────── */
+
+.s1 { animation: fadeUp 0.3s ease 0ms    both; }
+.s2 { animation: fadeUp 0.3s ease 80ms   both; }
+.s3 { animation: fadeUp 0.3s ease 160ms  both; }
+.s4 { animation: fadeUp 0.3s ease 240ms  both; }
+.s5 { animation: fadeUp 0.3s ease 320ms  both; }
+.s6 { animation: fadeUp 0.3s ease 400ms  both; }
+.s7 { animation: fadeUp 0.3s ease 480ms  both; }
+
+.pulse-dot {
+  animation: pulseDot 1.5s ease infinite;
+}
+
+/* ─── Dropdown ────────────────────────────────────────────── */
+
+.hu-dropdown-list {
+  position: absolute !important;
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  border: 1px solid #EEEEEE !important;
+  border-radius: 0 !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.06) !important;
+  z-index: 50 !important;
+}
+
+.hu-dropdown-option {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+
+.hu-dropdown-option:hover,
+.hu-dropdown-option.is-selected {
+  background: #FAFAFA !important;
+  background-color: #FAFAFA !important;
+}
+
+/* ─── Wave dots (processing indicator) ───────────────────── */
+
+@keyframes waveDot {
+  0%, 60%, 100% { opacity: 0.15; }
+  30%            { opacity: 1; }
+}
+
+.wave-1 { animation: waveDot 1.2s ease infinite 0s; }
+.wave-2 { animation: waveDot 1.2s ease infinite 0.25s; }
+.wave-3 { animation: waveDot 1.2s ease infinite 0.5s; }
+
+/* ─── Status transition fade ──────────────────────────────── */
+
+.status-fade { animation: fadeUp 0.3s ease both; }
+
+/* ─── Responsive nav ──────────────────────────────────────── */
+
+.nav-desktop  { display: flex; }
+.hamburger-btn { display: none; }
+
+@media (max-width: 768px) {
+  .nav-desktop   { display: none !important; }
+  .hamburger-btn { display: flex !important; }
+
+  .content-pad {
+    padding-inline: 20px !important;
+  }
 }
