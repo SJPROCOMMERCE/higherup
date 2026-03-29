@@ -490,6 +490,7 @@ export async function runPipeline(uploadId: string): Promise<void> {
     upload.client_id as string,
     upload.special_instructions as string | null,
     imageEnabled,
+    (upload as Record<string, unknown>).prompt_id as string | null,
   )
 
   const systemContent = [

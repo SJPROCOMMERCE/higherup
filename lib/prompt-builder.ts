@@ -37,6 +37,7 @@ export async function buildPrompt(
   clientId:            string,
   specialInstructions?: string | null,
   imageEnabled?:       boolean,
+  overridePromptId?:   string | null,
 ): Promise<{ system: string; title: string; description: string }> {
 
   // ── 1. Load client + profile ───────────────────────────────────────────────
@@ -48,10 +49,11 @@ export async function buildPrompt(
 
   const client = clientRaw as Record<string, unknown> | null
 
-  // ── 2. Resolve prompt ID from profile ─────────────────────────────────────
+  // ── 2. Resolve prompt ID — override takes priority over profile ───────────
   const profileRaw = client?.client_profiles
   const profile = Array.isArray(profileRaw) ? profileRaw[0] : profileRaw
-  const promptId  = (profile as Record<string, unknown> | null)?.prompt_id as string | null | undefined
+  const profilePromptId = (profile as Record<string, unknown> | null)?.prompt_id as string | null | undefined
+  const promptId = overridePromptId ?? profilePromptId
 
   // ── 3. Load linked prompt template ────────────────────────────────────────
   let prompt: PromptRow | null = null

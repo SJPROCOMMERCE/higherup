@@ -383,6 +383,16 @@ function HistoryRow({
             </div>
           )}
 
+          {/* ── TEMPLATE ──────────────────────────────────────── */}
+          {!!(u as Record<string, unknown>).prompts && (
+            <div style={{ marginBottom: 16 }}>
+              <SubLabel>Template</SubLabel>
+              <span style={{ fontSize: 11, color: T.ghost }}>
+                {((u as Record<string, unknown>).prompts as Record<string, string>)?.name ?? '—'}
+              </span>
+            </div>
+          )}
+
           {/* ── UPLOADED ──────────────────────────────────────── */}
           <div style={{ marginBottom: u.status === 'done' ? 16 : 0 }}>
             <SubLabel>Uploaded</SubLabel>
@@ -549,7 +559,7 @@ export default function UploadsPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let q: any = supabase
       .from('uploads')
-      .select('*', { count: 'exact' })
+      .select('*, prompts(name)', { count: 'exact' })
       .eq('va_id', currentVA.id)
       .order('uploaded_at', { ascending: false })
       .range(from, to)
