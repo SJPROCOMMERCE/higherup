@@ -643,6 +643,19 @@ function ClientDetail({
               <div style={val14}>{client.expected_monthly_products != null ? `${client.expected_monthly_products}/month` : <span style={{ color: '#DDDDDD' }}>—</span>}</div>
               <div style={label9}>SPECIAL INSTRUCTIONS</div>
               <div style={{ ...val14, whiteSpace: 'pre-wrap' }}>{client.special_instructions ?? <span style={{ color: '#DDDDDD' }}>None</span>}</div>
+              <div style={label9}>LISTING PREFERENCES</div>
+              <div style={{ marginBottom: 16 }}>
+                {detail?.profile?.custom_requirements ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 12, color: '#CCCCCC' }}>Custom requirements</span>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: '#F59E0B', background: '#FFF8E7', padding: '2px 8px', borderRadius: 4 }}>
+                      Yes — see Prompt Requests tab
+                    </span>
+                  </div>
+                ) : (
+                  <span style={{ fontSize: 14, color: '#DDDDDD' }}>Using HigherUp templates</span>
+                )}
+              </div>
             </div>
           </div>
 

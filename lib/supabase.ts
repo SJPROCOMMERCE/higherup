@@ -374,10 +374,24 @@ export type PromptVersion = {
   created_at: string
 }
 
+export type CustomData = {
+  maxDiscount: string
+  competitorPriceDiff: string
+  platforms: string[]
+  titleFormat: string
+  descriptionFormat: string
+  skuStructure: string
+  avgStock: string
+  collections: string
+  additionalNotes: string
+}
+
 export type ClientProfile = {
   id: string
   client_id: string
   prompt_id: string | null
+  custom_requirements: boolean | null
+  custom_data: CustomData | null
   updated_at: string
   updated_by: string | null
 }

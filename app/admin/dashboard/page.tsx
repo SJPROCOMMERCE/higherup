@@ -231,10 +231,12 @@ export default function AdminDashboardPage() {
     const in12h  = new Date(now.getTime() + 12 * 3_600_000).toISOString()
     const nowStr = now.toISOString()
 
+    const s7d = new Date(now.getTime() - 7 * 24 * 3_600_000).toISOString()
+
     const [
       { data: pVAs }, { data: pClients }, { data: pReqs },
       { data: onHold }, { data: overdues }, { data: failed }, { data: expiring },
-      { data: promptReqs },
+      { data: promptReqs }, { data: customReqData },
     ] = await Promise.all([
       supabase.from('vas').select('id, name, country, joined_at').eq('status', 'pending_approval').order('joined_at', { ascending: false }),
       supabase.from('clients').select('id, store_name, created_at, va_id, vas(name)').eq('approval_status', 'pending').order('created_at', { ascending: false }),
@@ -244,6 +246,7 @@ export default function AdminDashboardPage() {
       supabase.from('uploads').select('id, store_name, error_message, vas(name)').eq('status', 'failed').gte('processing_completed_at', s24h).order('processing_completed_at', { ascending: false }),
       supabase.from('clients').select('id, store_name, deadline_48h, va_id, vas(name)').eq('approval_status', 'approved').eq('is_active', true).not('deadline_48h', 'is', null).lte('deadline_48h', in12h).gte('deadline_48h', nowStr).order('deadline_48h', { ascending: true }),
       supabase.from('prompt_requests').select('id, client_id, va_id, message, created_at, clients(store_name), vas(name)').eq('status', 'submitted').order('created_at', { ascending: true }).limit(10),
+      supabase.from('client_profiles').select('client_id, created_at, clients!inner(store_name, va_id, vas!inner(name))').eq('custom_requirements', true).gte('created_at', s7d).order('created_at', { ascending: false }).limit(5),
     ])
 
     const items: AttentionItem[] = []
@@ -304,6 +307,13 @@ export default function AdminDashboardPage() {
       const f = pr0[0]
       const preview = f.message ? `"${f.message.slice(0, 40)}${f.message.length > 40 ? '…' : ''}"` : 'No message'
       items.push({ key: 'prompt_requests', count: pr0.length, label: `${pr0.length} optimization request${pr0.length !== 1 ? 's' : ''} pending review`, preview: `${f.clients?.store_name ?? '—'} via ${f.vas?.name ?? '—'}: ${preview}`, href: '/admin/clients' })
+    }
+
+    type CustomReqR = { client_id: string; created_at: string; clients: { store_name: string; va_id: string; vas: { name: string } } | null }
+    const cr0 = (customReqData ?? []) as unknown as CustomReqR[]
+    if (cr0.length) {
+      const f = cr0[0]
+      items.push({ key: 'custom_requirements', count: cr0.length, label: `${cr0.length} new client${cr0.length !== 1 ? 's' : ''} with custom listing requirements (last 7 days)`, preview: `${f.clients?.store_name ?? '—'} via ${f.clients?.vas?.name ?? '—'}, submitted ${timeAgo(f.created_at)}`, href: '/admin/clients' })
     }
 
     setAttention(items)

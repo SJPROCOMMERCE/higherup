@@ -1,5 +1,9 @@
 'use client'
 
+// SQL: Run this migration if custom_requirements / custom_data columns don't exist yet:
+// ALTER TABLE client_profiles ADD COLUMN IF NOT EXISTS custom_requirements BOOLEAN;
+// ALTER TABLE client_profiles ADD COLUMN IF NOT EXISTS custom_data JSONB;
+
 import { useEffect, useRef, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -439,6 +443,40 @@ function CustomCheckbox({ checked, onChange }: { checked: boolean; onChange: (v:
   )
 }
 
+// ─── Listing preferences constants ────────────────────────────────────────────
+
+const LISTING_PLATFORMS = [
+  'Google Shopping', 'Meta / Facebook', 'TikTok Shop', 'Amazon', 'Website only', 'Other',
+]
+
+// ─── Custom requirements message builder ──────────────────────────────────────
+
+type CustomData = {
+  maxDiscount: string
+  competitorPriceDiff: string
+  platforms: string[]
+  titleFormat: string
+  descriptionFormat: string
+  skuStructure: string
+  avgStock: string
+  collections: string
+  additionalNotes: string
+}
+
+function buildCustomRequirementsMessage(data: CustomData): string {
+  const lines: string[] = []
+  if (data.maxDiscount) lines.push(`Maximum discount: ${data.maxDiscount}%`)
+  if (data.competitorPriceDiff) lines.push(`Price vs competitors: ${data.competitorPriceDiff}% under`)
+  if (data.platforms.length > 0) lines.push(`Platforms: ${data.platforms.join(', ')}`)
+  if (data.titleFormat) lines.push(`Title format:\n${data.titleFormat}`)
+  if (data.descriptionFormat) lines.push(`Description format:\n${data.descriptionFormat}`)
+  if (data.skuStructure) lines.push(`SKU structure: ${data.skuStructure}`)
+  if (data.avgStock) lines.push(`Average stock per product: ${data.avgStock}`)
+  if (data.collections) lines.push(`Collections:\n${data.collections}`)
+  if (data.additionalNotes) lines.push(`Additional notes:\n${data.additionalNotes}`)
+  return lines.join('\n\n') || ''
+}
+
 // ─── Validation ───────────────────────────────────────────────────────────────
 
 type FormState = {
@@ -499,6 +537,21 @@ export default function NewClientPage() {
   const [submitError,     setSubmitError]     = useState(false)
   const [success,         setSuccess]         = useState(false)
 
+  // Listing preferences
+  const [hasCustomRequirements, setHasCustomRequirements] = useState<boolean | null>(null)
+  const [regSelectedFiles, setRegSelectedFiles] = useState<File[]>([])
+  const [customData, setCustomData] = useState<CustomData>({
+    maxDiscount: '',
+    competitorPriceDiff: '',
+    platforms: [],
+    titleFormat: '',
+    descriptionFormat: '',
+    skuStructure: '',
+    avgStock: '',
+    collections: '',
+    additionalNotes: '',
+  })
+
   // Live validation after first submit attempt
   useEffect(() => {
     if (hasTriedSubmit) setErrors(validate(form))
@@ -537,7 +590,7 @@ export default function NewClientPage() {
       form.special_instructions?.trim(),
     ].filter(Boolean).join('\n\n')
 
-    const { error } = await supabase.from('clients').insert({
+    const { data: insertedClient, error } = await supabase.from('clients').insert({
       va_id:                    currentVA.id,
       store_name:               form.store_name.trim(),
       store_domain:             form.store_domain.trim() || null,
@@ -552,16 +605,71 @@ export default function NewClientPage() {
       approval_status:          'pending',
       is_active:                true,
       deadline_48h:             form.start_date ? new Date(form.start_date + 'T00:00:00').toISOString() : null,
-    })
+    }).select('id').single()
 
     setSubmitting(false)
-    if (error) { setSubmitError(true); return }
+    if (error || !insertedClient) { setSubmitError(true); return }
+
+    const newClientId = insertedClient.id
+
+    // Create client_profiles entry with custom_requirements info
+    await supabase.from('client_profiles').insert({
+      client_id: newClientId,
+      prompt_id: null,
+      custom_requirements: hasCustomRequirements === true,
+      custom_data: hasCustomRequirements === true ? customData : null,
+    })
+
+    // If custom requirements: also create a prompt_request
+    if (hasCustomRequirements === true) {
+      const message = buildCustomRequirementsMessage(customData)
+      const hasContent = message.length > 0 || regSelectedFiles.length > 0
+      if (hasContent) {
+        // Upload files first
+        const fileUrls: string[] = []
+        const fileNames: string[] = []
+        const filePaths: string[] = []
+
+        for (const file of regSelectedFiles) {
+          if (file.size > 5 * 1024 * 1024) continue
+          const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+          const path = `${newClientId}/${Date.now()}-${safeName}`
+          const { error: uploadErr } = await supabase.storage.from('prompt-requests').upload(path, file, { upsert: false })
+          if (!uploadErr) {
+            const { data: signed } = await supabase.storage.from('prompt-requests').createSignedUrl(path, 60 * 60 * 24 * 365)
+            filePaths.push(path)
+            fileNames.push(file.name)
+            fileUrls.push(signed?.signedUrl ?? path)
+          }
+        }
+
+        await supabase.from('prompt_requests').insert({
+          client_id: newClientId,
+          va_id: currentVA.id,
+          message: message || null,
+          file_urls: fileUrls,
+          file_names: fileNames,
+          file_paths: filePaths,
+          status: 'submitted',
+        })
+      }
+    }
+
     void logActivity({
       action: 'client_registered',
       va_id: currentVA.id,
       source: 'va',
       details: `New client registered: ${form.store_name}`,
     })
+
+    // Reset listing preferences state
+    setHasCustomRequirements(null)
+    setRegSelectedFiles([])
+    setCustomData({
+      maxDiscount: '', competitorPriceDiff: '', platforms: [], titleFormat: '',
+      descriptionFormat: '', skuStructure: '', avgStock: '', collections: '', additionalNotes: '',
+    })
+
     setSuccess(true)
   }
 
@@ -776,6 +884,304 @@ export default function NewClientPage() {
           onChange={set('special_instructions')}
           placeholder="Any specific requirements from this client..."
         />
+      </div>
+
+      {/* ── Listing Preferences ─────────────────────────────── */}
+      <div className="s6" style={{ marginBottom: 36 }}>
+        <div style={{ marginTop: 36 }}>
+          <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: '#CCCCCC', textTransform: 'uppercase' as const, marginBottom: 8 }}>
+            LISTING PREFERENCES
+          </p>
+          <p style={{ fontSize: 13, color: '#999999', marginBottom: 16 }}>
+            Does your client have specific listing requirements?
+          </p>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' as const }}>
+            {[
+              { value: true,  label: 'Yes, my client has custom requirements' },
+              { value: false, label: "No, use HigherUp's optimized templates" },
+            ].map(opt => (
+              <button
+                key={String(opt.value)}
+                type="button"
+                onClick={() => setHasCustomRequirements(opt.value)}
+                style={{
+                  flex: '1 1 200px', padding: '14px 20px', borderRadius: 12, textAlign: 'left' as const,
+                  fontSize: 14, fontWeight: hasCustomRequirements === opt.value ? 500 : 400,
+                  color: hasCustomRequirements === opt.value ? '#111111' : '#999999',
+                  border: `1.5px solid ${hasCustomRequirements === opt.value ? '#111111' : '#EEEEEE'}`,
+                  background: hasCustomRequirements === opt.value ? '#FAFAFA' : 'white',
+                  cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s',
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* "No" confirmation block */}
+        {hasCustomRequirements === false && (
+          <div style={{ marginTop: 16, padding: 20, background: '#FAFAFA', borderRadius: 12 }}>
+            <p style={{ fontSize: 14, color: '#111111' }}>We&apos;ll use our high-performance templates.</p>
+            <p style={{ marginTop: 8, fontSize: 13, color: '#999999' }}>
+              Built from 4.5 years of e-commerce experience across our own stores. Optimized for maximum visibility and conversions.
+            </p>
+          </div>
+        )}
+
+        {/* "Yes" expanded form */}
+        {hasCustomRequirements === true && (
+          <div style={{ marginTop: 24, padding: '24px', background: '#FAFAFA', borderRadius: 16, border: '1px solid #EEEEEE' }}>
+
+            {/* Group 1 — PRICING STRATEGY */}
+            <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: '#CCCCCC', textTransform: 'uppercase' as const, marginBottom: 12 }}>
+              PRICING STRATEGY
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div>
+                <p style={{ fontSize: 11, color: '#CCCCCC', marginBottom: 6 }}>Max discount %</p>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={customData.maxDiscount}
+                  placeholder="e.g. 30"
+                  onChange={e => { const v = e.target.value; if (v === '' || /^\d*\.?\d*$/.test(v)) setCustomData(prev => ({ ...prev, maxDiscount: v })) }}
+                  style={{
+                    width: '100%', fontSize: 14, color: '#111111', background: 'white',
+                    border: '1px solid #EEEEEE', borderRadius: 8, padding: '10px 12px',
+                    outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border-color 0.15s',
+                  }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#111111' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#EEEEEE' }}
+                />
+              </div>
+              <div>
+                <p style={{ fontSize: 11, color: '#CCCCCC', marginBottom: 6 }}>Price vs competitors (% under)</p>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={customData.competitorPriceDiff}
+                  placeholder="e.g. 10"
+                  onChange={e => { const v = e.target.value; if (v === '' || /^\d*\.?\d*$/.test(v)) setCustomData(prev => ({ ...prev, competitorPriceDiff: v })) }}
+                  style={{
+                    width: '100%', fontSize: 14, color: '#111111', background: 'white',
+                    border: '1px solid #EEEEEE', borderRadius: 8, padding: '10px 12px',
+                    outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border-color 0.15s',
+                  }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#111111' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#EEEEEE' }}
+                />
+              </div>
+            </div>
+
+            {/* Group 2 — LISTING PLATFORM */}
+            <div style={{ marginTop: 32 }}>
+              <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: '#CCCCCC', textTransform: 'uppercase' as const, marginBottom: 12 }}>
+                LISTING PLATFORM
+              </p>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                {LISTING_PLATFORMS.map(platform => {
+                  const selected = customData.platforms.includes(platform)
+                  return (
+                    <button
+                      key={platform}
+                      type="button"
+                      onClick={() => setCustomData(prev => ({
+                        ...prev,
+                        platforms: selected
+                          ? prev.platforms.filter(p => p !== platform)
+                          : [...prev.platforms, platform],
+                      }))}
+                      style={{
+                        fontSize: 13, padding: '7px 16px', borderRadius: 100,
+                        border: `1.5px solid ${selected ? '#111111' : '#EEEEEE'}`,
+                        background: selected ? '#FAFAFA' : 'white',
+                        color: selected ? '#111111' : '#999999',
+                        cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s',
+                      }}
+                    >
+                      {platform}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Group 3 — LISTING FORMAT */}
+            <div style={{ marginTop: 32 }}>
+              <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: '#CCCCCC', textTransform: 'uppercase' as const, marginBottom: 12 }}>
+                LISTING FORMAT
+              </p>
+              <div>
+                <p style={{ fontSize: 11, color: '#CCCCCC', marginBottom: 6 }}>Title format</p>
+                <textarea
+                  value={customData.titleFormat}
+                  onChange={e => setCustomData(prev => ({ ...prev, titleFormat: e.target.value }))}
+                  placeholder="e.g. [Brand] [Product Name] [Key Feature] - [Material] [Size]"
+                  style={{
+                    width: '100%', fontSize: 13, color: '#111111', background: 'white',
+                    border: '1px solid #EEEEEE', borderRadius: 8, padding: '10px 12px',
+                    outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
+                    resize: 'vertical', minHeight: 80, lineHeight: 1.6, transition: 'border-color 0.15s',
+                  }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#111111' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#EEEEEE' }}
+                />
+              </div>
+              <div style={{ marginTop: 16 }}>
+                <p style={{ fontSize: 11, color: '#CCCCCC', marginBottom: 6 }}>Description format</p>
+                <textarea
+                  value={customData.descriptionFormat}
+                  onChange={e => setCustomData(prev => ({ ...prev, descriptionFormat: e.target.value }))}
+                  placeholder="e.g. Start with a hook sentence. List 3-5 bullet points with key features. End with a CTA."
+                  style={{
+                    width: '100%', fontSize: 13, color: '#111111', background: 'white',
+                    border: '1px solid #EEEEEE', borderRadius: 8, padding: '10px 12px',
+                    outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
+                    resize: 'vertical', minHeight: 80, lineHeight: 1.6, transition: 'border-color 0.15s',
+                  }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#111111' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#EEEEEE' }}
+                />
+              </div>
+            </div>
+
+            {/* Group 4 — SKU & INVENTORY */}
+            <div style={{ marginTop: 32 }}>
+              <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: '#CCCCCC', textTransform: 'uppercase' as const, marginBottom: 12 }}>
+                SKU &amp; INVENTORY
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div>
+                  <p style={{ fontSize: 11, color: '#CCCCCC', marginBottom: 6 }}>SKU structure</p>
+                  <input
+                    type="text"
+                    value={customData.skuStructure}
+                    placeholder="e.g. BRAND-CATEGORY-COLOR-SIZE"
+                    onChange={e => setCustomData(prev => ({ ...prev, skuStructure: e.target.value }))}
+                    style={{
+                      width: '100%', fontSize: 14, color: '#111111', background: 'white',
+                      border: '1px solid #EEEEEE', borderRadius: 8, padding: '10px 12px',
+                      outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border-color 0.15s',
+                    }}
+                    onFocus={e => { e.currentTarget.style.borderColor = '#111111' }}
+                    onBlur={e => { e.currentTarget.style.borderColor = '#EEEEEE' }}
+                  />
+                </div>
+                <div>
+                  <p style={{ fontSize: 11, color: '#CCCCCC', marginBottom: 6 }}>Average stock per product</p>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={customData.avgStock}
+                    placeholder="e.g. 50"
+                    onChange={e => { const v = e.target.value; if (v === '' || /^\d+$/.test(v)) setCustomData(prev => ({ ...prev, avgStock: v })) }}
+                    style={{
+                      width: '100%', fontSize: 14, color: '#111111', background: 'white',
+                      border: '1px solid #EEEEEE', borderRadius: 8, padding: '10px 12px',
+                      outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border-color 0.15s',
+                    }}
+                    onFocus={e => { e.currentTarget.style.borderColor = '#111111' }}
+                    onBlur={e => { e.currentTarget.style.borderColor = '#EEEEEE' }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Group 5 — COLLECTIONS */}
+            <div style={{ marginTop: 32 }}>
+              <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: '#CCCCCC', textTransform: 'uppercase' as const, marginBottom: 12 }}>
+                COLLECTIONS
+              </p>
+              <textarea
+                value={customData.collections}
+                onChange={e => setCustomData(prev => ({ ...prev, collections: e.target.value }))}
+                placeholder={'e.g.\nSukienki Letnie\nSukienki Wieczorowe\nBluzki i Koszule'}
+                style={{
+                  width: '100%', fontSize: 13, color: '#111111', background: 'white',
+                  border: '1px solid #EEEEEE', borderRadius: 8, padding: '10px 12px',
+                  outline: 'none', fontFamily: 'monospace', boxSizing: 'border-box',
+                  resize: 'vertical', height: 120, lineHeight: 1.6, transition: 'border-color 0.15s',
+                }}
+                onFocus={e => { e.currentTarget.style.borderColor = '#111111' }}
+                onBlur={e => { e.currentTarget.style.borderColor = '#EEEEEE' }}
+              />
+              <p style={{ fontSize: 11, color: '#CCCCCC', marginTop: 6 }}>One collection per line. Original names.</p>
+            </div>
+
+            {/* Group 6 — ADDITIONAL INFO */}
+            <div style={{ marginTop: 32 }}>
+              <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: '#CCCCCC', textTransform: 'uppercase' as const, marginBottom: 12 }}>
+                ADDITIONAL INFO
+              </p>
+
+              {/* File upload */}
+              <div style={{ marginBottom: 16 }}>
+                <p style={{ fontSize: 11, color: '#CCCCCC', marginBottom: 8 }}>Attachments</p>
+                {regSelectedFiles.map((file, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: 13, color: '#111111', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
+                    <span style={{ fontSize: 11, color: '#CCCCCC', flexShrink: 0 }}>
+                      {file.size < 1024 * 1024 ? (file.size / 1024).toFixed(0) + ' KB' : (file.size / (1024 * 1024)).toFixed(1) + ' MB'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setRegSelectedFiles(prev => prev.filter((_, j) => j !== i))}
+                      style={{ fontSize: 16, color: '#CCCCCC', background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}
+                    >×</button>
+                  </div>
+                ))}
+                {regSelectedFiles.length < 5 && (
+                  <label
+                    style={{ display: 'inline-block', marginTop: 4, fontSize: 13, color: '#CCCCCC', cursor: 'pointer', transition: 'color 0.15s' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#111111' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#CCCCCC' }}
+                  >
+                    + Add file
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.txt,.csv"
+                      style={{ display: 'none' }}
+                      onChange={e => {
+                        const newFiles = Array.from(e.target.files || [])
+                        const combined = [...regSelectedFiles, ...newFiles].slice(0, 5)
+                        const oversized = combined.filter(f => f.size > 5 * 1024 * 1024)
+                        if (oversized.length > 0) { alert(`Files exceed 5MB: ${oversized.map(f => f.name).join(', ')}`); return }
+                        setRegSelectedFiles(combined)
+                        e.target.value = ''
+                      }}
+                    />
+                  </label>
+                )}
+                <p style={{ fontSize: 11, color: '#DDDDDD', marginTop: 6 }}>Max 5 files · 5MB each</p>
+              </div>
+
+              {/* Additional notes */}
+              <div>
+                <p style={{ fontSize: 11, color: '#CCCCCC', marginBottom: 6 }}>Additional notes</p>
+                <textarea
+                  value={customData.additionalNotes}
+                  onChange={e => setCustomData(prev => ({ ...prev, additionalNotes: e.target.value }))}
+                  placeholder="Any other requirements, brand guidelines, or context..."
+                  style={{
+                    width: '100%', fontSize: 13, color: '#111111', background: 'white',
+                    border: '1px solid #EEEEEE', borderRadius: 8, padding: '10px 12px',
+                    outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
+                    resize: 'vertical', minHeight: 80, lineHeight: 1.6, transition: 'border-color 0.15s',
+                  }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#111111' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#EEEEEE' }}
+                />
+              </div>
+            </div>
+
+            {/* Bottom note */}
+            <p style={{ fontSize: 11, color: '#CCCCCC', marginTop: 20, fontStyle: 'italic' }}>
+              All fields are optional. Fill in what you know — we&apos;ll figure out the rest.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* ── 48h Confirmation ─────────────────────────────────── */}
