@@ -16,15 +16,14 @@ import { getCountryData, getPaymentMethods, COUNTRIES } from '@/lib/country-data
 // 6  = REVEAL: Their reality
 // 7  = REVEAL: Comparison
 // 8  = FORM: Payout
-// 9  = REVEAL: One upload = $130
-// 10 = REVEAL: Slider (interactive)
-// 11 = REVEAL: Compound effect
-// 12 = FORM: Referral code → Complete setup
-// 13 = REVEAL: Identity shift (submit runs async here)
-// 14 = CONFIRM: Login code
+// 9  = REVEAL: Slider (interactive)
+// 10 = REVEAL: Compound effect
+// 11 = FORM: Referral code → Complete setup
+// 12 = REVEAL: Identity shift (submit runs async here)
+// 13 = CONFIRM: Login code
 
-const TOTAL_STEPS = 14
-type StepNum = 1|2|3|4|5|6|7|8|9|10|11|12|13|14
+const TOTAL_STEPS = 13
+type StepNum = 1|2|3|4|5|6|7|8|9|10|11|12|13
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -390,7 +389,7 @@ export function OnboardingForm({ token: _token, inviteId }: { token: string; inv
 
   function goForward() {
     const next = (step + 1) as StepNum
-    if (next <= 14) goTo(next)
+    if (next <= 13) goTo(next)
   }
 
   // ── Payment helpers ───────────────────────────────────────────────────────
@@ -499,9 +498,9 @@ export function OnboardingForm({ token: _token, inviteId }: { token: string; inv
     }
   }, [form, refState, refVaId, inviteId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Step 12: go to identity shift immediately, submit in background
+  // Step 11: go to identity shift immediately, submit in background
   function handleCompleteSetup() {
-    goTo(13)
+    goTo(12)
     handleSubmit()
   }
 
@@ -871,31 +870,8 @@ export function OnboardingForm({ token: _token, inviteId }: { token: string; inv
             </div>
           )}
 
-          {/* ── Step 9: One upload = $130 ─────────────────────────────── */}
+          {/* ── Step 9: Slider ────────────────────────────────────────── */}
           {step === 9 && (
-            <RevealScreen onContinue={goForward} continueDelay={5000}>
-              <RevealText delay={0} style={{ fontSize: 14, color: C.ghost, marginBottom: 20, letterSpacing: '0.04em' }}>
-                Let&apos;s talk money.
-              </RevealText>
-              <div style={{ fontSize: bigN(80), fontWeight: 700, lineHeight: 1, letterSpacing: '-0.03em', color: C.green, marginBottom: 4 }}>
-                <CountUp end={130} prefix="$" delay={400} duration={1200} />
-              </div>
-              <RevealText delay={1400} style={{ fontSize: 16, color: C.black, marginBottom: 32 }}>
-                per client, per month.
-              </RevealText>
-              <RevealText delay={2600} style={{ fontSize: 15, color: C.gray, lineHeight: 1.65 }}>
-                You upload their products.<br />
-                One CSV. 25 listings. About 2 minutes.<br />
-                They pay every month, like clockwork.
-              </RevealText>
-              <RevealText delay={3800} style={{ fontSize: 15, fontWeight: 500, color: C.black, marginTop: 20 }}>
-                One client. $130. Every single month.
-              </RevealText>
-            </RevealScreen>
-          )}
-
-          {/* ── Step 10: Slider ───────────────────────────────────────── */}
-          {step === 10 && (
             <StepSlider
               sliderGoal={sliderGoal}
               setSliderGoal={setSliderGoal}
@@ -904,8 +880,8 @@ export function OnboardingForm({ token: _token, inviteId }: { token: string; inv
             />
           )}
 
-          {/* ── Step 11: Compound effect ──────────────────────────────── */}
-          {step === 11 && (
+          {/* ── Step 10: Compound effect ──────────────────────────────── */}
+          {step === 10 && (
             <RevealScreen onContinue={goForward} continueDelay={5500}>
               <RevealText delay={0} style={{ fontSize: 22, fontWeight: 300, color: C.black, lineHeight: 1.4, marginBottom: 48 }}>
                 Here&apos;s what {sliderGoal} {sliderGoal === 1 ? 'client' : 'clients'} looks like over time.
@@ -935,8 +911,8 @@ export function OnboardingForm({ token: _token, inviteId }: { token: string; inv
             </RevealScreen>
           )}
 
-          {/* ── Step 12: Referral code + Complete setup ───────────────── */}
-          {step === 12 && (
+          {/* ── Step 11: Referral code + Complete setup ───────────────── */}
+          {step === 11 && (
             <div>
               <div style={{ textAlign: 'center', marginBottom: 48 }}>
                 <RevealText delay={0} style={{ fontSize: 11, letterSpacing: '0.15em', textTransform: 'uppercase', color: C.ghost, marginBottom: 18 }}>
@@ -998,18 +974,18 @@ export function OnboardingForm({ token: _token, inviteId }: { token: string; inv
             </div>
           )}
 
-          {/* ── Step 13: Identity shift ───────────────────────────────── */}
-          {step === 13 && (
+          {/* ── Step 12: Identity shift ───────────────────────────────── */}
+          {step === 12 && (
             <StepIdentityShift
               firstName={firstName}
               loginCode={loginCode}
-              onContinue={() => goTo(14)}
+              onContinue={() => goTo(13)}
               bigN={bigN}
             />
           )}
 
-          {/* ── Step 14: Confirmation ─────────────────────────────────── */}
-          {step === 14 && (
+          {/* ── Step 13: Confirmation ─────────────────────────────────── */}
+          {step === 13 && (
             <div style={{ textAlign: 'center' }}>
               <RevealText delay={0} style={{ fontSize: 11, letterSpacing: '0.15em', textTransform: 'uppercase', color: C.ghost, marginBottom: 32 }}>
                 You&apos;re in
