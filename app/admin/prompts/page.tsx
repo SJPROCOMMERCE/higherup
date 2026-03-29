@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Prompt, PromptVersion } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-log'
+import { SelectAllCheckbox } from '@/components/admin/SelectAllCheckbox'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
@@ -598,7 +599,7 @@ function LinkedClientsPanel({ promptId, promptName }: { promptId: string; prompt
   const [linkedLoading, setLinkedLoading] = useState(false)
   const [showLinkDropdown, setShowLinkDropdown] = useState(false)
   const [allClientsForLink, setAllClientsForLink] = useState<AllClientForLink[]>([])
-  const [unlinkConfirmId, setUnlinkConfirmId] = useState<string | null>(null)
+  const [linkSearch, setLinkSearch] = useState('')
   const [linkConfirmClient, setLinkConfirmClient] = useState<AllClientForLink | null>(null)
   const [linkLoading, setLinkLoading] = useState(false)
 
@@ -638,7 +639,6 @@ function LinkedClientsPanel({ promptId, promptName }: { promptId: string; prompt
       .delete()
       .eq('client_id', clientId)
       .eq('prompt_id', promptId)
-    setUnlinkConfirmId(null)
     await loadLinked()
   }
 
@@ -714,34 +714,25 @@ function LinkedClientsPanel({ promptId, promptName }: { promptId: string; prompt
               {NICHE_LABELS[c.niche] ?? c.niche}
             </span>
           )}
-          {unlinkConfirmId === c.client_id ? (
-            <span style={{ fontSize: 11, color: T.ter }}>
-              No prompt template. Uploads will use General fallback. Remove link?{' '}
-              <button
-                onClick={() => handleUnlink(c.client_id)}
-                style={{ fontSize: 11, color: T.red, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}
-              >Yes</button>
-              {' / '}
-              <button
-                onClick={() => setUnlinkConfirmId(null)}
-                style={{ fontSize: 11, color: T.ghost, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}
-              >No</button>
-            </span>
-          ) : (
-            <button
-              onClick={() => setUnlinkConfirmId(c.client_id)}
-              style={{ fontSize: 12, color: T.ghost, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, transition: 'color 0.15s' }}
-              onMouseEnter={e => e.currentTarget.style.color = T.black}
-              onMouseLeave={e => e.currentTarget.style.color = T.ghost}
-            >Unlink</button>
-          )}
+          <button
+            type="button"
+            onClick={() => {
+              if (confirm(`Remove ${c.store_name} from this template? They will fall back to the default template.`)) {
+                void handleUnlink(c.client_id)
+              }
+            }}
+            style={{ fontSize: 12, color: T.ghost, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, transition: 'color 0.15s' }}
+            onMouseEnter={e => e.currentTarget.style.color = T.black}
+            onMouseLeave={e => e.currentTarget.style.color = T.ghost}
+          >Unlink</button>
         </div>
       ))}
 
       {/* Link to another client */}
       {!showLinkDropdown && (
         <button
-          onClick={loadAllClients}
+          type="button"
+          onClick={() => { setLinkSearch(''); loadAllClients() }}
           disabled={linkLoading}
           style={{ fontSize: 12, color: T.ghost, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, marginTop: 10, transition: 'color 0.15s' }}
           onMouseEnter={e => e.currentTarget.style.color = T.black}
@@ -753,27 +744,53 @@ function LinkedClientsPanel({ promptId, promptName }: { promptId: string; prompt
 
       {showLinkDropdown && (
         <div style={{ marginTop: 10 }}>
-          <select
-            defaultValue=""
-            onChange={e => {
-              const id = e.target.value
-              if (!id) return
-              const client = allClientsForLink.find(c => c.id === id) ?? null
-              setLinkConfirmClient(client)
-            }}
-            style={{ fontSize: 12, color: T.black, border: `1px solid ${T.div}`, borderRadius: 6, padding: '6px 10px', fontFamily: 'inherit', outline: 'none', background: T.bg, cursor: 'pointer', marginRight: 8 }}
-          >
-            <option value="">Select a client…</option>
-            {allClientsForLink.map(c => (
-              <option key={c.id} value={c.id}>
-                {c.store_name} — {c.va_name} (current: {c.current_prompt ?? 'None'})
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={() => { setShowLinkDropdown(false); setLinkConfirmClient(null) }}
-            style={{ fontSize: 11, color: T.ghost, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}
-          >Cancel</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <input
+              type="text"
+              placeholder="Search clients…"
+              value={linkSearch}
+              onChange={e => { setLinkSearch(e.target.value); setLinkConfirmClient(null) }}
+              autoFocus
+              style={{ fontSize: 12, color: T.black, border: `1px solid ${T.div}`, borderRadius: 6, padding: '6px 10px', fontFamily: 'inherit', outline: 'none', background: T.bg, flex: 1 }}
+            />
+            <button
+              type="button"
+              onClick={() => { setShowLinkDropdown(false); setLinkConfirmClient(null); setLinkSearch('') }}
+              style={{ fontSize: 11, color: T.ghost, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}
+            >Cancel</button>
+          </div>
+          {(() => {
+            const q = linkSearch.trim().toLowerCase()
+            const matches = q
+              ? allClientsForLink.filter(c => c.store_name.toLowerCase().includes(q) || c.va_name.toLowerCase().includes(q))
+              : allClientsForLink.slice(0, 10)
+            if (matches.length === 0) {
+              return <div style={{ fontSize: 12, color: T.ghost, paddingBlock: 4 }}>No clients found.</div>
+            }
+            return (
+              <div style={{ border: `1px solid ${T.div}`, borderRadius: 6, overflow: 'hidden', maxHeight: 200, overflowY: 'auto' }}>
+                {matches.map(c => (
+                  <div
+                    key={c.id}
+                    onClick={() => setLinkConfirmClient(c)}
+                    style={{
+                      padding: '7px 10px', cursor: 'pointer', fontSize: 12,
+                      background: linkConfirmClient?.id === c.id ? T.div : T.bg,
+                      borderBottom: `1px solid ${T.div}`,
+                    }}
+                    onMouseEnter={e => { if (linkConfirmClient?.id !== c.id) (e.currentTarget as HTMLDivElement).style.background = '#F8F8F8' }}
+                    onMouseLeave={e => { if (linkConfirmClient?.id !== c.id) (e.currentTarget as HTMLDivElement).style.background = T.bg }}
+                  >
+                    <span style={{ color: T.black }}>{c.store_name}</span>
+                    <span style={{ color: T.ter }}> · {c.va_name}</span>
+                    {c.current_prompt && (
+                      <span style={{ color: T.ghost }}> · currently: {c.current_prompt}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
         </div>
       )}
 
@@ -1070,6 +1087,7 @@ function PromptRow({
   onDuplicate,
   onToggleVersions,
   onSelect,
+  onToggleActive,
 }: {
   prompt: Prompt
   isExpanded: boolean
@@ -1091,6 +1109,7 @@ function PromptRow({
   onDuplicate: () => void
   onToggleVersions: () => void
   onSelect: (v: boolean) => void
+  onToggleActive: () => void
 }) {
   const router = useRouter()
   const hasSystemPrompt = !!prompt.system_prompt && !isPlaceholder(prompt.system_prompt)
@@ -1297,6 +1316,19 @@ function PromptRow({
               onMouseLeave={e => { if (!isDuplicating) e.currentTarget.style.color = T.ter }}
             >
               {isDuplicating ? 'Duplicating…' : 'Duplicate'}
+            </button>
+
+            <button
+              type="button"
+              onClick={onToggleActive}
+              style={{
+                fontSize: 13, color: prompt.is_active ? T.ter : T.green, background: 'none', border: 'none',
+                cursor: 'pointer', padding: 0, fontFamily: 'inherit', transition: 'color 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = '0.7'}
+              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+            >
+              {prompt.is_active ? 'Deactivate' : 'Activate'}
             </button>
 
             {/* Compare button */}
@@ -1730,6 +1762,22 @@ export default function AdminPromptsPage() {
     await load()
   }
 
+  // ── Quick toggle active ────────────────────────────────────────────────────
+
+  async function handleToggleActive(prompt: Prompt) {
+    if (prompt.is_active) {
+      // Deactivating — check linked clients
+      const { data: linked } = await supabase
+        .from('client_profiles')
+        .select('client_id')
+        .eq('prompt_id', prompt.id)
+      const count = linked?.length ?? 0
+      if (count > 0 && !confirm(`This template is used by ${count} client${count !== 1 ? 's' : ''}. They will fall back to the default template. Continue?`)) return
+    }
+    await supabase.from('prompts').update({ is_active: !prompt.is_active }).eq('id', prompt.id)
+    await load()
+  }
+
   // ── Bulk operations ────────────────────────────────────────────────────────
 
   async function bulkActivate() {
@@ -1837,6 +1885,18 @@ export default function AdminPromptsPage() {
     }
     return true
   })
+
+  // ── Select-all helpers ────────────────────────────────────────────────────
+
+  const allSelected  = filtered.length > 0 && filtered.every(p => selectedIds.has(p.id))
+  const someSelected = filtered.some(p => selectedIds.has(p.id))
+  function toggleSelectAll() {
+    if (allSelected) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(filtered.map(p => p.id)))
+    }
+  }
 
   // ── Stats ─────────────────────────────────────────────────────────────────
 
@@ -2102,6 +2162,18 @@ export default function AdminPromptsPage() {
       )}
 
       {/* ── List ───────────────────────────────────────────────────── */}
+      {!loading && filtered.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 8, borderBottom: `1px solid #EEEEEE`, marginBottom: 4 }}>
+          <SelectAllCheckbox
+            allSelected={allSelected}
+            someSelected={someSelected}
+            onChange={toggleSelectAll}
+          />
+          <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#CCCCCC', fontWeight: 400 }}>
+            {allSelected ? 'Deselect all' : someSelected ? `${selectedIds.size} selected` : 'Select all'}
+          </span>
+        </div>
+      )}
       {loading ? (
         <div style={{ fontSize: 13, color: T.ghost }}>Loading…</div>
       ) : filtered.length === 0 ? (
@@ -2132,6 +2204,7 @@ export default function AdminPromptsPage() {
             onSave={() => saveEdit(prompt)}
             onDuplicate={() => duplicate(prompt)}
             onToggleVersions={() => setVersionShow(versionShow === prompt.id ? null : prompt.id)}
+            onToggleActive={() => handleToggleActive(prompt)}
             onSelect={v => {
               setSelectedIds(prev => {
                 const next = new Set(prev)

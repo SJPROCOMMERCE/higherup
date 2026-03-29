@@ -6,6 +6,7 @@ import type { VA, Client, Affiliate, ReferralCode } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-log'
 import { generateUniqueLoginCode } from '@/lib/generate-login-code'
 import { createInvite } from '@/lib/invite'
+import { SelectAllCheckbox } from '@/components/admin/SelectAllCheckbox'
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 
@@ -590,6 +591,17 @@ export default function AdminVAsPage() {
     setBulkConfirm(false)
   }
 
+  // ─── Select all ───────────────────────────────────────────────────────────
+  const allVAsSelected  = pageVAs.length > 0 && pageVAs.every(v => selected.has(v.id))
+  const someVAsSelected = pageVAs.some(v => selected.has(v.id))
+  function toggleSelectAllVAs() {
+    if (allVAsSelected) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(pageVAs.map(v => v.id)))
+    }
+  }
+
   // ─── CSV Export ───────────────────────────────────────────────────────────
   function exportCSV(list: VAx[]) {
     const headers = ['VA ID', 'Name', 'Email', 'Country', 'Phone', 'Payment Method', 'Status', 'Joined', 'Clients Count', 'Monthly Products', 'Revenue All Time', 'Referred By', 'Referral Code', 'Streak']
@@ -846,6 +858,18 @@ export default function AdminVAsPage() {
       )}
 
       {/* ── VA List ── */}
+      {!loading && pageVAs.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${T.div}`, marginBottom: 4 }}>
+          <SelectAllCheckbox
+            allSelected={allVAsSelected}
+            someSelected={someVAsSelected}
+            onChange={toggleSelectAllVAs}
+          />
+          <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: T.ghost, fontWeight: 400 }}>
+            {allVAsSelected ? 'Deselect all' : someVAsSelected ? `${selected.size} selected` : 'Select all'}
+          </span>
+        </div>
+      )}
       {loading ? (
         <div style={{ fontSize: 13, color: T.ghost }}>Loading…</div>
       ) : pageVAs.length === 0 ? (

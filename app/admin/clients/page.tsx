@@ -6,6 +6,7 @@ import type { Client, Prompt, ClientProfile, ProfileChangeRequest } from '@/lib/
 import { logActivity } from '@/lib/activity-log'
 import { getRecommendedPromptFromList, matchTypeColor } from '@/lib/prompt-matching'
 import type { PromptRecommendation } from '@/lib/prompt-matching'
+import { SelectAllCheckbox } from '@/components/admin/SelectAllCheckbox'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const T = {
@@ -1450,11 +1451,10 @@ export default function AdminClientsPage() {
       {/* Table header */}
       <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 1fr 80px 80px', gap: 16, padding: '8px 0', borderBottom: `1px solid ${T.div}`, marginBottom: 4 }}>
         <div>
-          <input
-            type="checkbox"
-            checked={paginated.length > 0 && selected.size === paginated.length}
+          <SelectAllCheckbox
+            allSelected={paginated.length > 0 && selected.size === paginated.length}
+            someSelected={selected.size > 0 && selected.size < paginated.length}
             onChange={toggleSelectAll}
-            style={{ cursor: 'pointer' }}
           />
         </div>
         {['STORE / VA', 'STATS', 'TIER', 'STATUS'].map(h => (
