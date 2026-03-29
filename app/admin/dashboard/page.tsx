@@ -234,6 +234,7 @@ export default function AdminDashboardPage() {
     const [
       { data: pVAs }, { data: pClients }, { data: pReqs },
       { data: onHold }, { data: overdues }, { data: failed }, { data: expiring },
+      { data: promptReqs },
     ] = await Promise.all([
       supabase.from('vas').select('id, name, country, joined_at').eq('status', 'pending_approval').order('joined_at', { ascending: false }),
       supabase.from('clients').select('id, store_name, created_at, va_id, vas(name)').eq('approval_status', 'pending').order('created_at', { ascending: false }),
@@ -242,6 +243,7 @@ export default function AdminDashboardPage() {
       supabase.from('billing').select('id, va_id, va_name, total_amount, due_date').eq('status', 'overdue').order('due_date', { ascending: true }),
       supabase.from('uploads').select('id, store_name, error_message, vas(name)').eq('status', 'failed').gte('processing_completed_at', s24h).order('processing_completed_at', { ascending: false }),
       supabase.from('clients').select('id, store_name, deadline_48h, va_id, vas(name)').eq('approval_status', 'approved').eq('is_active', true).not('deadline_48h', 'is', null).lte('deadline_48h', in12h).gte('deadline_48h', nowStr).order('deadline_48h', { ascending: true }),
+      supabase.from('prompt_requests').select('id, client_id, va_id, message, created_at, clients(store_name), vas(name)').eq('status', 'submitted').order('created_at', { ascending: true }).limit(10),
     ])
 
     const items: AttentionItem[] = []
@@ -294,6 +296,14 @@ export default function AdminDashboardPage() {
       const f = ex0[0]
       const hrs = Math.max(0, Math.floor((new Date(f.deadline_48h).getTime() - Date.now()) / 3_600_000))
       items.push({ key: 'expiring_deadlines', count: ex0.length, label: `${ex0.length} client${ex0.length !== 1 ? 's' : ''} about to expire (48h deadline)`, preview: `${f.store_name}${f.vas ? ` for ${f.vas.name}` : ''}: expires in ${hrs}h`, href: '/admin/approvals' })
+    }
+
+    type PromptReqR = { id: string; client_id: string; va_id: string; message: string | null; created_at: string; clients: { store_name: string } | null; vas: { name: string } | null }
+    const pr0 = (promptReqs ?? []) as unknown as PromptReqR[]
+    if (pr0.length) {
+      const f = pr0[0]
+      const preview = f.message ? `"${f.message.slice(0, 40)}${f.message.length > 40 ? '…' : ''}"` : 'No message'
+      items.push({ key: 'prompt_requests', count: pr0.length, label: `${pr0.length} optimization request${pr0.length !== 1 ? 's' : ''} pending review`, preview: `${f.clients?.store_name ?? '—'} via ${f.vas?.name ?? '—'}: ${preview}`, href: '/admin/clients' })
     }
 
     setAttention(items)

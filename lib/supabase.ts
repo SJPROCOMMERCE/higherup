@@ -391,3 +391,19 @@ export type Notification = {
   is_read: boolean
   created_at: string
 }
+
+export type PromptRequest = {
+  id: string
+  client_id: string
+  va_id: string
+  message: string | null
+  file_urls: string[]
+  file_names: string[]
+  status: 'submitted' | 'reviewed' | 'applied' | 'rejected'
+  admin_response: string | null
+  reviewed_by: string | null
+  reviewed_at: string | null
+  applied_at: string | null
+  created_at: string
+  updated_at: string
+}

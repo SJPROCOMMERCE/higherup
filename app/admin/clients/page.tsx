@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { Client, Prompt, ClientProfile, ProfileChangeRequest } from '@/lib/supabase'
+import type { Client, Prompt, ClientProfile, ProfileChangeRequest, PromptRequest } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-log'
 import { getRecommendedPromptFromList, matchTypeColor } from '@/lib/prompt-matching'
 import type { PromptRecommendation } from '@/lib/prompt-matching'
@@ -258,6 +258,10 @@ function ClientDetail({
   const [editPromptId, setEditPromptId] = useState('')
   const [savingProfile, setSavingProfile] = useState(false)
 
+  // Prompt requests
+  const [promptRequests, setPromptRequests] = useState<PromptRequest[]>([])
+  const [adminResponses, setAdminResponses] = useState<Record<string, string>>({})
+
   const status = clientStatus(client)
 
   // Auto-select recommended prompt using full 4-level fallback logic
@@ -314,7 +318,70 @@ function ClientDetail({
       setLoading(false)
     }
     void load()
+    void loadPromptRequests()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client.id])
+
+  async function loadPromptRequests() {
+    const { data } = await supabase
+      .from('prompt_requests')
+      .select('*, vas(name), clients(store_name)')
+      .eq('client_id', client.id)
+      .order('created_at', { ascending: false })
+    setPromptRequests((data || []) as unknown as PromptRequest[])
+  }
+
+  async function markRequestReviewed(requestId: string) {
+    await supabase.from('prompt_requests').update({
+      status: 'reviewed',
+      admin_response: adminResponses[requestId] || null,
+      reviewed_by: 'admin',
+      reviewed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq('id', requestId)
+    await loadPromptRequests()
+  }
+
+  async function markRequestApplied(requestId: string, vaId: string, storeName: string) {
+    const response = adminResponses[requestId]
+    if (!response?.trim()) { alert('Please add a response explaining what was changed.'); return }
+    await supabase.from('prompt_requests').update({
+      status: 'applied',
+      admin_response: response,
+      reviewed_by: 'admin',
+      reviewed_at: new Date().toISOString(),
+      applied_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq('id', requestId)
+    await supabase.from('notifications').insert({
+      va_id: vaId,
+      type: 'request_approved',
+      title: `Optimization updated — ${storeName}`,
+      message: response,
+      is_read: false,
+    })
+    await loadPromptRequests()
+  }
+
+  async function rejectRequest(requestId: string, vaId: string, storeName: string) {
+    const response = adminResponses[requestId]
+    if (!response?.trim()) { alert('Please explain why this request was rejected.'); return }
+    await supabase.from('prompt_requests').update({
+      status: 'rejected',
+      admin_response: response,
+      reviewed_by: 'admin',
+      reviewed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq('id', requestId)
+    await supabase.from('notifications').insert({
+      va_id: vaId,
+      type: 'request_rejected',
+      title: `Request update — ${storeName}`,
+      message: response,
+      is_read: false,
+    })
+    await loadPromptRequests()
+  }
 
   async function handleApprove() {
     setApproving(true)
@@ -724,6 +791,73 @@ function ClientDetail({
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Section E2: Prompt Requests */}
+          {promptRequests.length > 0 && (
+            <div style={{ marginBottom: 32, paddingBottom: 24, borderBottom: `1px solid ${T.div}` }}>
+              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: T.ghost, marginBottom: 12 }}>
+                PROMPT REQUESTS ({promptRequests.length})
+              </div>
+              {promptRequests.map((req: PromptRequest & { vas?: { name: string }; clients?: { store_name: string } }) => {
+                const statusMap: Record<string, { color: string; label: string }> = {
+                  submitted: { color: '#F59E0B', label: 'Pending' },
+                  reviewed:  { color: '#3B82F6', label: 'Reviewed' },
+                  applied:   { color: '#2DB87E', label: 'Applied ✓' },
+                  rejected:  { color: '#999999', label: 'Rejected' },
+                }
+                const s = statusMap[req.status] || statusMap.submitted
+                const isPending = req.status === 'submitted' || req.status === 'reviewed'
+                const fileUrls = (req as unknown as { file_urls?: string[] }).file_urls ?? []
+                const fileNames = req.file_names ?? []
+                return (
+                  <div key={req.id} style={{ paddingTop: 16, borderTop: `1px solid ${T.div}`, marginTop: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <span style={{ fontSize: 12, color: T.ghost }}>
+                        {fmtDate(req.created_at)}
+                        {req.vas?.name && <span style={{ marginLeft: 8 }}>via {req.vas.name}</span>}
+                      </span>
+                      <span style={{ fontSize: 11, fontWeight: 500, color: s.color }}>{s.label}</span>
+                    </div>
+                    {req.message && <p style={{ fontSize: 13, color: T.sec, marginBottom: 8 }}>{req.message}</p>}
+                    {Array.isArray(fileNames) && fileNames.map((name: string, i: number) => {
+                      const url = fileUrls[i]
+                      const isImage = /\.(png|jpg|jpeg|gif|webp)$/i.test(name)
+                      return (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                          {isImage && url && <img src={url} alt={name} style={{ width: 40, height: 40, borderRadius: 4, objectFit: 'cover' }} />}
+                          <span style={{ fontSize: 13, color: T.black }}>{name}</span>
+                          {url && <button type="button" onClick={() => window.open(url, '_blank')} style={{ fontSize: 12, color: T.ghost, background: 'none', border: 'none', cursor: 'pointer' }}>View</button>}
+                        </div>
+                      )
+                    })}
+                    {req.admin_response && !isPending && (
+                      <div style={{ marginTop: 8, paddingLeft: 12, borderLeft: '2px solid #F0F0F0' }}>
+                        <p style={{ fontSize: 12, color: T.ter }}>{req.admin_response}</p>
+                      </div>
+                    )}
+                    {isPending && (
+                      <div style={{ marginTop: 12 }}>
+                        <input
+                          type="text"
+                          value={adminResponses[req.id] || ''}
+                          onChange={(e) => setAdminResponses(prev => ({ ...prev, [req.id]: e.target.value }))}
+                          placeholder="What was changed or why rejected..."
+                          style={{ width: '100%', paddingBottom: 6, fontSize: 13, color: T.black, border: 'none', borderBottom: `1px solid ${T.div}`, outline: 'none', background: 'transparent', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                          onFocus={e => { e.currentTarget.style.borderBottomColor = T.black }}
+                          onBlur={e => { e.currentTarget.style.borderBottomColor = T.div }}
+                        />
+                        <div style={{ display: 'flex', gap: 16, marginTop: 10 }}>
+                          <button type="button" onClick={() => void markRequestReviewed(req.id)} style={{ fontSize: 12, color: T.ghost, background: 'none', border: 'none', cursor: 'pointer' }}>Mark as reviewed</button>
+                          <button type="button" onClick={() => void markRequestApplied(req.id, req.va_id, client.store_name)} style={{ fontSize: 12, color: T.ghost, background: 'none', border: 'none', cursor: 'pointer' }}>Mark as applied</button>
+                          <button type="button" onClick={() => void rejectRequest(req.id, req.va_id, client.store_name)} style={{ fontSize: 12, color: T.ghost, background: 'none', border: 'none', cursor: 'pointer' }}>Reject</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
 
