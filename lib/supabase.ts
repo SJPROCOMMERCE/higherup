@@ -344,8 +344,8 @@ export type Prompt = {
   required_keywords: string | null
   max_title_length: number | null
   max_description_length: number | null
-  html_allowed: boolean | null
-  emoji_allowed: boolean | null
+  allow_html: boolean | null
+  allow_emoji: boolean | null
 
   // Tracking
   parent_prompt_id: string | null

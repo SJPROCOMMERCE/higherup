@@ -11,32 +11,24 @@ import type { Prompt } from '@/lib/supabase'
 type FieldKey = keyof Pick<
   Prompt,
   | 'system_prompt'
-  | 'title_instructions'
-  | 'description_instructions'
-  | 'seo_instructions'
-  | 'tags_instructions'
   | 'formatting_rules'
   | 'forbidden_words'
   | 'required_keywords'
   | 'max_title_length'
   | 'max_description_length'
-  | 'html_allowed'
-  | 'emoji_allowed'
+  | 'allow_html'
+  | 'allow_emoji'
 >
 
 const FIELDS: { key: FieldKey; label: string }[] = [
-  { key: 'system_prompt',            label: 'System Prompt'           },
-  { key: 'title_instructions',       label: 'Title Instructions'      },
-  { key: 'description_instructions', label: 'Description Instructions'},
-  { key: 'seo_instructions',         label: 'SEO Instructions'        },
-  { key: 'tags_instructions',        label: 'Tags Instructions'       },
-  { key: 'formatting_rules',         label: 'Formatting Rules'        },
-  { key: 'forbidden_words',          label: 'Forbidden Words'         },
-  { key: 'required_keywords',        label: 'Required Keywords'       },
-  { key: 'max_title_length',         label: 'Max Title Length'        },
-  { key: 'max_description_length',   label: 'Max Description Length'  },
-  { key: 'html_allowed',             label: 'HTML Allowed'            },
-  { key: 'emoji_allowed',            label: 'Emoji Allowed'           },
+  { key: 'system_prompt',          label: 'System Prompt'         },
+  { key: 'formatting_rules',       label: 'Formatting Rules'      },
+  { key: 'forbidden_words',        label: 'Forbidden Words'       },
+  { key: 'required_keywords',      label: 'Required Keywords'     },
+  { key: 'max_title_length',       label: 'Max Title Length'      },
+  { key: 'max_description_length', label: 'Max Description Length'},
+  { key: 'allow_html',             label: 'HTML Allowed'          },
+  { key: 'allow_emoji',            label: 'Emoji Allowed'         },
 ]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

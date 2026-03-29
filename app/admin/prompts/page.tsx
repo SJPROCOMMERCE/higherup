@@ -356,8 +356,8 @@ function toDraft(p: Prompt): DraftPrompt {
     required_keywords:        p.required_keywords ?? '',
     max_title_length:         p.max_title_length?.toString() ?? '',
     max_description_length:   p.max_description_length?.toString() ?? '',
-    html_allowed:             p.html_allowed ?? true,
-    emoji_allowed:            p.emoji_allowed ?? false,
+    html_allowed:             p.allow_html ?? true,
+    emoji_allowed:            p.allow_emoji ?? false,
     is_active:                p.is_active ?? true,
     is_default:               p.is_default ?? false,
     change_notes:             '',
@@ -1060,6 +1060,8 @@ function PromptRow({
   selected,
   allPrompts,
   clientCount,
+  saveError,
+  justSaved,
   onToggle,
   onEdit,
   onCancelEdit,
@@ -1079,6 +1081,8 @@ function PromptRow({
   selected: boolean
   allPrompts: Prompt[]
   clientCount: number
+  saveError: string | null
+  justSaved: boolean
   onToggle: () => void
   onEdit: () => void
   onCancelEdit: () => void
@@ -1169,9 +1173,13 @@ function PromptRow({
 
         {/* Fill indicator */}
         <div style={{ flexShrink: 0, textAlign: 'right' }}>
-          <div style={{ fontSize: 11, color: hasSystemPrompt ? T.green : T.ghost }}>
-            {hasSystemPrompt ? `${filledSections}/5 sections filled` : 'Placeholder'}
-          </div>
+          {justSaved ? (
+            <div style={{ fontSize: 11, color: T.green, fontWeight: 500 }}>✓ Saved</div>
+          ) : (
+            <div style={{ fontSize: 11, color: hasSystemPrompt ? T.green : T.ghost }}>
+              {hasSystemPrompt ? `${filledSections}/5 sections filled` : 'Placeholder'}
+            </div>
+          )}
           <div style={{ fontSize: 10, color: T.ghost, marginTop: 1 }}>
             v{prompt.version} · {prompt.usage_count ?? 0} uses
             {clientCount > 0 && ` · ${clientCount} client${clientCount !== 1 ? 's' : ''}`}
@@ -1208,8 +1216,8 @@ function PromptRow({
               ['Market',       prompt.market || '—'],
               ['Max title',    prompt.max_title_length ? `${prompt.max_title_length} chars` : '—'],
               ['Max desc',     prompt.max_description_length ? `${prompt.max_description_length} chars` : '—'],
-              ['HTML allowed', prompt.html_allowed ? 'Yes' : 'No'],
-              ['Emoji',        prompt.emoji_allowed ? 'Yes' : 'No'],
+              ['HTML allowed', prompt.allow_html ? 'Yes' : 'No'],
+              ['Emoji',        prompt.allow_emoji ? 'Yes' : 'No'],
               ['Created',      formatDate(prompt.created_at)],
               ['Updated',      formatDate(prompt.updated_at)],
               ['Last used',    formatDate(prompt.last_used_at)],
@@ -1362,9 +1370,21 @@ function PromptRow({
             </div>
           )}
 
+          {/* Save error */}
+          {saveError && (
+            <div style={{
+              marginTop: 16, padding: '10px 14px', background: '#FFF0F0',
+              border: '1px solid #FFCCCC', borderRadius: 8,
+              fontSize: 12, color: T.red,
+            }}>
+              {saveError}
+            </div>
+          )}
+
           {/* Save / cancel */}
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 24 }}>
             <button
+              type="button"
               onClick={onSave}
               disabled={isSaving || !draft.name.trim()}
               style={{
@@ -1376,9 +1396,10 @@ function PromptRow({
               onMouseEnter={e => { if (!isSaving) e.currentTarget.style.opacity = '0.75' }}
               onMouseLeave={e => { if (!isSaving) e.currentTarget.style.opacity = '1' }}
             >
-              {isSaving ? 'Saving…' : `Save — v${prompt.version + 1}`}
+              {isSaving ? 'Saving…' : 'Save'}
             </button>
             <button
+              type="button"
               onClick={onCancelEdit}
               disabled={isSaving}
               style={{
@@ -1439,35 +1460,29 @@ function NewPromptModal({
     setSaving(true)
     setError(null)
     const { error: err } = await supabase.from('prompts').insert({
-      name:                     draft.name.trim(),
-      description:              draft.description || null,
-      niche:                    draft.niche || null,
-      language:                 draft.language || null,
-      market:                   draft.market || null,
-      system_prompt:            draft.system_prompt || null,
-      title_prompt:             draft.title_prompt || null,
-      description_prompt:       draft.description_prompt || null,
-      title_instructions:       draft.title_instructions || null,
-      description_instructions: draft.description_instructions || null,
-      seo_instructions:         draft.seo_instructions || null,
-      formatting_rules:         draft.formatting_rules || null,
-      alt_text_instructions:    draft.alt_text_instructions || null,
-      filename_instructions:    draft.filename_instructions || null,
-      tags_instructions:        draft.tags_instructions || null,
+      name:                    draft.name.trim(),
+      description:             draft.description || null,
+      niche:                   draft.niche || null,
+      language:                draft.language || null,
+      market:                  draft.market || null,
+      system_prompt:           draft.system_prompt || null,
+      title_prompt:            draft.title_prompt || null,
+      description_prompt:      draft.description_prompt || null,
+      formatting_rules:        draft.formatting_rules || null,
+      alt_text_instructions:   draft.alt_text_instructions || null,
+      filename_instructions:   draft.filename_instructions || null,
       price_rules_instructions: draft.price_rules_instructions || null,
-      tone_examples:            draft.tone_examples || null,
-      title_examples:           draft.title_examples || null,
-      description_examples:     draft.description_examples || null,
-      forbidden_words:          draft.forbidden_words || null,
-      required_keywords:        draft.required_keywords || null,
-      max_title_length:         draft.max_title_length ? parseInt(draft.max_title_length) : null,
-      max_description_length:   draft.max_description_length ? parseInt(draft.max_description_length) : null,
-      html_allowed:             draft.html_allowed,
-      emoji_allowed:            draft.emoji_allowed,
-      is_active:                draft.is_active,
-      is_default:               draft.is_default,
-      version:                  1,
-      usage_count:              0,
+      tone_examples:           draft.tone_examples || null,
+      forbidden_words:         draft.forbidden_words || null,
+      required_keywords:       draft.required_keywords || null,
+      max_title_length:        draft.max_title_length ? parseInt(draft.max_title_length) : null,
+      max_description_length:  draft.max_description_length ? parseInt(draft.max_description_length) : null,
+      allow_html:              draft.html_allowed,
+      allow_emoji:             draft.emoji_allowed,
+      is_active:               draft.is_active,
+      is_default:              draft.is_default,
+      version:                 1,
+      usage_count:             0,
     })
     if (err) { setError(err.message); setSaving(false); return }
     void logActivity({
@@ -1535,6 +1550,8 @@ export default function AdminPromptsPage() {
   const [editId,       setEditId]       = useState<string | null>(null)
   const [editDraft,    setEditDraft]    = useState<DraftPrompt | null>(null)
   const [saving,       setSaving]       = useState<string | null>(null)
+  const [saveError,    setSaveError]    = useState<string | null>(null)
+  const [saveSuccess,  setSaveSuccess]  = useState<string | null>(null)
   const [duplicating,  setDuplicating]  = useState<string | null>(null)
   const [versionShow,  setVersionShow]  = useState<string | null>(null)
   const [showNew,      setShowNew]      = useState(false)
@@ -1598,6 +1615,8 @@ export default function AdminPromptsPage() {
   function startEdit(prompt: Prompt) {
     setEditId(prompt.id)
     setEditDraft(toDraft(prompt))
+    setSaveError(null)
+    setSaveSuccess(null)
   }
 
   function cancelEdit() {
@@ -1610,105 +1629,102 @@ export default function AdminPromptsPage() {
   }
 
   async function saveEdit(prompt: Prompt) {
-    if (!editDraft) return
-    setSaving(prompt.id)
-
-    // 1. Archive old version
-    await supabase.from('prompt_versions').insert({
-      prompt_id:                prompt.id,
-      version:                  prompt.version,
-      system_prompt:            prompt.system_prompt,
-      title_instructions:       prompt.title_instructions,
-      description_instructions: prompt.description_instructions,
-      seo_instructions:         prompt.seo_instructions,
-      tags_instructions:        prompt.tags_instructions,
-      formatting_rules:         prompt.formatting_rules,
-      changed_by:               'admin',
-      change_notes:             editDraft.change_notes || null,
-    })
-
-    // 2. Update prompt
-    const { error } = await supabase.from('prompts').update({
-      name:                     editDraft.name.trim(),
-      description:              editDraft.description || null,
-      niche:                    editDraft.niche || null,
-      language:                 editDraft.language || null,
-      market:                   editDraft.market || null,
-      system_prompt:            editDraft.system_prompt || null,
-      title_prompt:             editDraft.title_prompt || null,
-      description_prompt:       editDraft.description_prompt || null,
-      title_instructions:       editDraft.title_instructions || null,
-      description_instructions: editDraft.description_instructions || null,
-      seo_instructions:         editDraft.seo_instructions || null,
-      formatting_rules:         editDraft.formatting_rules || null,
-      alt_text_instructions:    editDraft.alt_text_instructions || null,
-      filename_instructions:    editDraft.filename_instructions || null,
-      tags_instructions:        editDraft.tags_instructions || null,
-      price_rules_instructions: editDraft.price_rules_instructions || null,
-      tone_examples:            editDraft.tone_examples || null,
-      title_examples:           editDraft.title_examples || null,
-      description_examples:     editDraft.description_examples || null,
-      forbidden_words:          editDraft.forbidden_words || null,
-      required_keywords:        editDraft.required_keywords || null,
-      max_title_length:         editDraft.max_title_length ? parseInt(editDraft.max_title_length) : null,
-      max_description_length:   editDraft.max_description_length ? parseInt(editDraft.max_description_length) : null,
-      html_allowed:             editDraft.html_allowed,
-      emoji_allowed:            editDraft.emoji_allowed,
-      is_active:                editDraft.is_active,
-      is_default:               editDraft.is_default,
-      version:                  prompt.version + 1,
-      updated_by:               'admin',
-      updated_at:               new Date().toISOString(),
-    }).eq('id', prompt.id)
-
-    if (!error) {
-      void logActivity({
-        action: 'prompt_updated',
-        source: 'admin',
-        details: `Prompt updated: ${editDraft.name.trim()}`,
-      })
-      setEditId(null)
-      setEditDraft(null)
-      setExpanded(null)
+    if (!editDraft) {
+      alert('Save error: editDraft is null')
+      return
     }
+    const promptId = editId ?? prompt.id
+    setSaving(promptId)
+    setSaveError(null)
+    setSaveSuccess(null)
+
+    const { data: updated, error } = await supabase
+      .from('prompts')
+      .update({
+        name:                    editDraft.name.trim(),
+        description:             editDraft.description || null,
+        niche:                   editDraft.niche || null,
+        language:                editDraft.language || null,
+        market:                  editDraft.market || null,
+        system_prompt:           editDraft.system_prompt || null,
+        title_prompt:            editDraft.title_prompt || null,
+        description_prompt:      editDraft.description_prompt || null,
+        formatting_rules:        editDraft.formatting_rules || null,
+        alt_text_instructions:   editDraft.alt_text_instructions || null,
+        filename_instructions:   editDraft.filename_instructions || null,
+        price_rules_instructions: editDraft.price_rules_instructions || null,
+        tone_examples:           editDraft.tone_examples || null,
+        forbidden_words:         editDraft.forbidden_words || null,
+        required_keywords:       editDraft.required_keywords || null,
+        max_title_length:        editDraft.max_title_length ? parseInt(editDraft.max_title_length) : null,
+        max_description_length:  editDraft.max_description_length ? parseInt(editDraft.max_description_length) : null,
+        allow_html:              editDraft.html_allowed,   // DB column is allow_html
+        allow_emoji:             editDraft.emoji_allowed,  // DB column is allow_emoji
+        is_active:               editDraft.is_active,
+        is_default:              editDraft.is_default,
+        updated_at:              new Date().toISOString(),
+      })
+      .eq('id', promptId)
+      .select()
+
+    if (error) {
+      alert('Save failed: ' + error.message)
+      setSaveError(`Save failed: ${error.message}`)
+      setSaving(null)
+      return
+    }
+
+    if (!updated || updated.length === 0) {
+      alert('Save failed: no rows matched (ID: ' + promptId + ')')
+      setSaveError(`Save failed: no rows matched`)
+      setSaving(null)
+      return
+    }
+
+    // SUCCESS
+    const savedPrompt = updated[0] as Prompt
+    setPrompts(prev => prev.map(p => p.id === promptId ? savedPrompt : p))
+    setEditId(null)
+    setEditDraft(null)
     setSaving(null)
-    await load()
+    setSaveSuccess(promptId)
+    setTimeout(() => setSaveSuccess(null), 3000)
+    void logActivity({
+      action: 'prompt_updated',
+      source: 'admin',
+      details: `Prompt updated: ${savedPrompt.name}`,
+    })
+    load()
   }
 
   async function duplicate(prompt: Prompt) {
     setDuplicating(prompt.id)
     await supabase.from('prompts').insert({
       name:                     `${prompt.name} (copy)`,
-      description:              prompt.description,
-      niche:                    prompt.niche,
-      language:                 prompt.language,
-      market:                   prompt.market,
-      system_prompt:            prompt.system_prompt,
-      title_prompt:             prompt.title_prompt,
-      description_prompt:       prompt.description_prompt,
-      title_instructions:       prompt.title_instructions,
-      description_instructions: prompt.description_instructions,
-      seo_instructions:         prompt.seo_instructions,
-      formatting_rules:         prompt.formatting_rules,
-      alt_text_instructions:    prompt.alt_text_instructions,
-      filename_instructions:    prompt.filename_instructions,
-      tags_instructions:        prompt.tags_instructions,
+      description:             prompt.description,
+      niche:                   prompt.niche,
+      language:                prompt.language,
+      market:                  prompt.market,
+      system_prompt:           prompt.system_prompt,
+      title_prompt:            prompt.title_prompt,
+      description_prompt:      prompt.description_prompt,
+      formatting_rules:        prompt.formatting_rules,
+      alt_text_instructions:   prompt.alt_text_instructions,
+      filename_instructions:   prompt.filename_instructions,
       price_rules_instructions: prompt.price_rules_instructions,
-      tone_examples:            prompt.tone_examples,
-      title_examples:           prompt.title_examples,
-      description_examples:     prompt.description_examples,
-      forbidden_words:          prompt.forbidden_words,
-      required_keywords:        prompt.required_keywords,
-      max_title_length:         prompt.max_title_length,
-      max_description_length:   prompt.max_description_length,
-      html_allowed:             prompt.html_allowed,
-      emoji_allowed:            prompt.emoji_allowed,
-      is_active:                false,  // start as inactive
-      is_default:               false,
-      parent_prompt_id:         prompt.id,
-      version:                  1,
-      usage_count:              0,
-      created_by:               'admin',
+      tone_examples:           prompt.tone_examples,
+      forbidden_words:         prompt.forbidden_words,
+      required_keywords:       prompt.required_keywords,
+      max_title_length:        prompt.max_title_length,
+      max_description_length:  prompt.max_description_length,
+      allow_html:              prompt.allow_html ?? false,
+      allow_emoji:             prompt.allow_emoji ?? false,
+      is_active:               false,  // start as inactive
+      is_default:              false,
+      parent_prompt_id:        prompt.id,
+      version:                 1,
+      usage_count:             0,
+      created_by:              'admin',
     })
     setDuplicating(null)
     await load()
@@ -2108,6 +2124,8 @@ export default function AdminPromptsPage() {
               setExpanded(expanded === prompt.id ? null : prompt.id)
               setVersionShow(null)
             }}
+            saveError={editId === prompt.id ? saveError : null}
+            justSaved={saveSuccess === prompt.id}
             onEdit={() => startEdit(prompt)}
             onCancelEdit={cancelEdit}
             onDraftChange={handleDraftChange}
