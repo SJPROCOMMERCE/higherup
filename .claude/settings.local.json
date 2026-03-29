@@ -93,7 +93,12 @@
       "Bash(grep -l \"notifications\" /Users/safouaneelajjouri/Documents/HigherUp/supabase/migrations/*.sql)",
       "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
       "Bash(grep -rn \"from\\(''''prompts''''\\)\\\\|title_prompt\\\\|description_prompt\\\\|titlePrompt\\\\|descriptionPrompt\" /Users/safouaneelajjouri/Documents/HigherUp/app/admin/ --include=*.tsx --include=*.ts)",
-      "Bash(curl -s http://localhost:3000 -o /dev/null -w \"%{http_code}\")"
+      "Bash(curl -s http://localhost:3000 -o /dev/null -w \"%{http_code}\")",
+      "Bash(echo \"Exit code: $?\")",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Read(//Users/safouaneelajjouri/Documents/HigherUp/app/admin/$f/**)",
+      "Bash(done)"
     ]
   }
 }
