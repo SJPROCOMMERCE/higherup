@@ -706,6 +706,30 @@ function ClientDetail({
                   <span style={{ fontSize: 14, color: '#DDDDDD' }}>Using HigherUp templates</span>
                 )}
               </div>
+              {/* Pricing rules summary */}
+              {detail?.profile?.pricing_basis === 'compare_at' && (
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <div style={label9}>PRICING RULES</div>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: '#059669', background: '#ECFDF5', padding: '2px 6px', borderRadius: 4 }}>ACTIVE</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: T.black, background: '#F9FAFB', padding: '10px 12px', borderRadius: 8, display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
+                    {detail.profile.competitor_price_diff != null && (
+                      <div><span style={{ color: T.ter }}>Selling price:</span> {detail.profile.competitor_price_diff}% below Compare At Price</div>
+                    )}
+                    {detail.profile.max_discount != null && (
+                      <div><span style={{ color: T.ter }}>Max discount cap:</span> {detail.profile.max_discount}%</div>
+                    )}
+                    {detail.profile.price_ending && detail.profile.price_ending !== 'none' && (
+                      <div><span style={{ color: T.ter }}>Price ending:</span> {detail.profile.price_ending}</div>
+                    )}
+                    <div style={{ fontSize: 11, color: T.ghost, marginTop: 2 }}>Applied automatically to every upload for this client.</div>
+                  </div>
+                </div>
+              )}
+              {detail?.profile?.pricing_basis === 'manual' && (
+                <div style={{ fontSize: 12, color: T.ghost, marginTop: 4 }}>Prices: kept as-is (no automatic adjustments)</div>
+              )}
             </div>
           </div>
 

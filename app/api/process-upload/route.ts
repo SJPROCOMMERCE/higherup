@@ -3,6 +3,8 @@ import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-log'
 import { buildPrompt } from '@/lib/prompt-builder'
+import { applyPricingToRow } from '@/lib/product-pricing'
+import type { ProductPricingRules } from '@/lib/product-pricing'
 
 // ─── Vercel max function duration ─────────────────────────────────────────────
 export const maxDuration = 300
@@ -730,6 +732,31 @@ export async function runPipeline(uploadId: string): Promise<void> {
 
     return out
   })
+
+  // 13b. Apply client-level pricing rules (if configured)
+  if (priceCol) {
+    const { data: pricingProfile } = await supabase
+      .from('client_profiles')
+      .select('max_discount, competitor_price_diff, price_ending, pricing_basis')
+      .eq('client_id', String(upload.client_id))
+      .maybeSingle()
+
+    if (pricingProfile?.pricing_basis && pricingProfile.pricing_basis !== 'manual') {
+      const pricingRules: ProductPricingRules = {
+        maxDiscount:        (pricingProfile.max_discount         as number | null) ?? null,
+        competitorPriceDiff:(pricingProfile.competitor_price_diff as number | null) ?? null,
+        priceEnding:        (pricingProfile.price_ending          as string | null) ?? null,
+        pricingBasis:       (pricingProfile.pricing_basis         as string | null) ?? null,
+      }
+      let pricingApplied = 0
+      for (let i = 0; i < outputRows.length; i++) {
+        const updated = applyPricingToRow(outputRows[i], priceCol, compareAtCol ?? '', pricingRules)
+        if (updated[priceCol] !== outputRows[i][priceCol]) pricingApplied++
+        outputRows[i] = updated
+      }
+      console.log(`[process-upload] pricing rules applied to ${pricingApplied}/${outputRows.length} rows (basis=${pricingProfile.pricing_basis})`)
+    }
+  }
 
   // 14. Serialize output file
   const isXLSX = upload.file_type === 'xlsx'

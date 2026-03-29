@@ -377,6 +377,8 @@ export type PromptVersion = {
 export type CustomData = {
   maxDiscount: string
   competitorPriceDiff: string
+  priceEnding: string        // '.99' | '.95' | '.90' | '.00' | 'none' | ''
+  pricingBasis: string       // 'compare_at' | 'manual' | ''
   platform: string
   titlePrompt: string
   descriptionPrompt: string
@@ -392,6 +394,11 @@ export type ClientProfile = {
   prompt_id: string | null
   custom_requirements: boolean | null
   custom_data: CustomData | null
+  // Pricing columns (set from custom_data at registration time)
+  max_discount: number | null
+  competitor_price_diff: number | null
+  price_ending: string | null
+  pricing_basis: string | null
   updated_at: string
   updated_by: string | null
 }

@@ -452,6 +452,8 @@ const ADVERTISING_PLATFORMS = ['Google', 'Meta', 'TikTok']
 type CustomData = {
   maxDiscount: string
   competitorPriceDiff: string
+  priceEnding: string   // '.99' | '.95' | '.90' | '.00' | 'none' | ''
+  pricingBasis: string  // 'compare_at' | 'manual' | ''
   platform: string
   titlePrompt: string
   descriptionPrompt: string
@@ -461,10 +463,22 @@ type CustomData = {
   additionalNotes: string
 }
 
+const PRICE_ENDINGS = [
+  { value: '.99', label: '.99', example: '€24.99' },
+  { value: '.95', label: '.95', example: '€24.95' },
+  { value: '.90', label: '.90', example: '€24.90' },
+  { value: '.00', label: '.00', example: '€25.00' },
+  { value: 'none', label: 'No rounding', example: 'Keep as-is' },
+]
+
 function buildCustomRequirementsMessage(data: CustomData): string {
   const lines: string[] = []
+  if (data.pricingBasis === 'compare_at') lines.push(`Pricing basis: Discount from Compare At Price`)
+  if (data.pricingBasis === 'manual') lines.push(`Pricing basis: Prices are already set (no changes)`)
   if (data.maxDiscount) lines.push(`Maximum discount: ${data.maxDiscount}%`)
   if (data.competitorPriceDiff) lines.push(`Price vs competitors: ${data.competitorPriceDiff}% under`)
+  if (data.priceEnding && data.priceEnding !== 'none') lines.push(`Price ending: ${data.priceEnding}`)
+  if (data.priceEnding === 'none') lines.push(`Price ending: No rounding`)
   if (data.platform) lines.push(`Advertising platform: ${data.platform}`)
   if (data.titlePrompt) lines.push(`Title prompt:\n${data.titlePrompt}`)
   if (data.descriptionPrompt) lines.push(`Description prompt:\n${data.descriptionPrompt}`)
@@ -541,6 +555,8 @@ export default function NewClientPage() {
   const [customData, setCustomData] = useState<CustomData>({
     maxDiscount: '',
     competitorPriceDiff: '',
+    priceEnding: '',
+    pricingBasis: '',
     platform: '',
     titlePrompt: '',
     descriptionPrompt: '',
@@ -610,12 +626,16 @@ export default function NewClientPage() {
 
     const newClientId = insertedClient.id
 
-    // Create client_profiles entry with custom_requirements info
+    // Create client_profiles entry with custom_requirements + pricing columns
     await supabase.from('client_profiles').insert({
-      client_id: newClientId,
-      prompt_id: null,
-      custom_requirements: hasCustomRequirements === true,
-      custom_data: hasCustomRequirements === true ? customData : null,
+      client_id:             newClientId,
+      prompt_id:             null,
+      custom_requirements:   hasCustomRequirements === true,
+      custom_data:           hasCustomRequirements === true ? customData : null,
+      max_discount:          hasCustomRequirements === true ? (parseFloat(customData.maxDiscount) || null) : null,
+      competitor_price_diff: hasCustomRequirements === true ? (parseFloat(customData.competitorPriceDiff) || null) : null,
+      price_ending:          hasCustomRequirements === true ? (customData.priceEnding || null) : null,
+      pricing_basis:         hasCustomRequirements === true ? (customData.pricingBasis || null) : null,
     })
 
     // If custom requirements: always create a prompt_request so admin sees it
@@ -664,8 +684,9 @@ export default function NewClientPage() {
     setHasCustomRequirements(null)
     setRegSelectedFiles([])
     setCustomData({
-      maxDiscount: '', competitorPriceDiff: '', platform: '', titlePrompt: '',
-      descriptionPrompt: '', skuStructure: '', avgStock: '', collections: '', additionalNotes: '',
+      maxDiscount: '', competitorPriceDiff: '', priceEnding: '', pricingBasis: '',
+      platform: '', titlePrompt: '', descriptionPrompt: '',
+      skuStructure: '', avgStock: '', collections: '', additionalNotes: '',
     })
 
     setSuccess(true)
@@ -971,6 +992,63 @@ export default function NewClientPage() {
                 />
               </div>
             </div>
+
+            {/* Pricing basis */}
+            <div style={{ marginTop: 24 }}>
+              <p style={{ fontSize: 11, color: '#CCCCCC', marginBottom: 10 }}>Pricing basis</p>
+              <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
+                {[
+                  { value: 'compare_at', label: 'Discount from Compare At Price', sub: 'The CSV has a "Compare At Price" — the selling price is X% below it' },
+                  { value: 'manual',     label: 'Prices are already set',          sub: 'Don\'t change prices — only optimize titles and descriptions' },
+                ].map(opt => {
+                  const sel = customData.pricingBasis === opt.value
+                  return (
+                    <button key={opt.value} type="button"
+                      onClick={() => setCustomData(prev => ({ ...prev, pricingBasis: sel ? '' : opt.value }))}
+                      style={{
+                        textAlign: 'left' as const, padding: '12px 14px', borderRadius: 10,
+                        border: `1.5px solid ${sel ? '#111111' : '#EEEEEE'}`,
+                        background: sel ? '#FAFAFA' : 'white',
+                        cursor: 'pointer', fontFamily: 'inherit',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      <div style={{ fontSize: 13, color: '#111111', fontWeight: sel ? 500 : 400 }}>{opt.label}</div>
+                      <div style={{ fontSize: 11, color: '#CCCCCC', marginTop: 2 }}>{opt.sub}</div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Price ending — only relevant when compare_at mode selected */}
+            {customData.pricingBasis === 'compare_at' && (
+              <div style={{ marginTop: 20 }}>
+                <p style={{ fontSize: 11, color: '#CCCCCC', marginBottom: 10 }}>Price ending</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 8 }}>
+                  {PRICE_ENDINGS.map(opt => {
+                    const sel = customData.priceEnding === opt.value
+                    return (
+                      <button key={opt.value} type="button"
+                        onClick={() => setCustomData(prev => ({ ...prev, priceEnding: sel ? '' : opt.value }))}
+                        style={{
+                          padding: '8px 16px', borderRadius: 8, cursor: 'pointer',
+                          border: `1.5px solid ${sel ? '#111111' : '#EEEEEE'}`,
+                          background: sel ? '#FAFAFA' : 'white',
+                          color: sel ? '#111111' : '#999999',
+                          fontWeight: sel ? 500 : 400,
+                          fontSize: 13, fontFamily: 'inherit', transition: 'all 0.15s',
+                          display: 'flex', gap: 8, alignItems: 'center',
+                        }}
+                      >
+                        <span>{opt.label}</span>
+                        <span style={{ fontSize: 11, color: '#CCCCCC' }}>{opt.example}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Group 2 — ADVERTISING PLATFORM */}
             <div style={{ marginTop: 32 }}>
