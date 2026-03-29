@@ -392,6 +392,14 @@ export function OnboardingForm({ token: _token, inviteId }: { token: string; inv
     if (next <= 13) goTo(next)
   }
 
+  function goBack() {
+    const prev = (step - 1) as StepNum
+    if (prev >= 1) goTo(prev)
+  }
+
+  // Back button is hidden on step 1 (nothing before) and steps 12-13 (submit in progress / confirmation)
+  const showBack = step > 1 && step < 12
+
   // ── Payment helpers ───────────────────────────────────────────────────────
 
   function pd(key: string) { return form.paymentDetails[key] ?? '' }
@@ -534,10 +542,37 @@ export function OnboardingForm({ token: _token, inviteId }: { token: string; inv
     }}>
       {/* Logo bar */}
       <div style={{
-        height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        height: 64, display: 'flex', alignItems: 'center',
         flexShrink: 0, borderBottom: `1px solid ${C.border}`,
+        paddingInline: 24, position: 'relative',
       }}>
+        {/* Back button — left */}
+        <div style={{ flex: 1 }}>
+          {showBack && (
+            <button
+              onClick={goBack}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 6,
+                fontSize: 13, color: C.ghost, fontFamily: 'inherit',
+                padding: '8px 0', transition: 'color 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = C.black }}
+              onMouseLeave={e => { e.currentTarget.style.color = C.ghost }}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M9 2L4 7L9 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Go back
+            </button>
+          )}
+        </div>
+
+        {/* Logo — center */}
         <img src="/logo.png" alt="HigherUp" style={{ height: 28, width: 'auto', display: 'block' }} />
+
+        {/* Spacer — right (mirrors back button width for centering) */}
+        <div style={{ flex: 1 }} />
       </div>
 
       {/* Content — key={step} forces full remount on every step change */}
