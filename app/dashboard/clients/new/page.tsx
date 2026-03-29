@@ -648,6 +648,7 @@ export default function NewClientPage() {
           file_urls: fileUrls,
           file_names: fileNames,
           file_paths: filePaths,
+          structured_data: customData,
           status: 'submitted',
         })
       }

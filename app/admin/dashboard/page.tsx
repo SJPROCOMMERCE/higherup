@@ -306,7 +306,7 @@ export default function AdminDashboardPage() {
     if (pr0.length) {
       const f = pr0[0]
       const preview = f.message ? `"${f.message.slice(0, 40)}${f.message.length > 40 ? '…' : ''}"` : 'No message'
-      items.push({ key: 'prompt_requests', count: pr0.length, label: `${pr0.length} optimization request${pr0.length !== 1 ? 's' : ''} pending review`, preview: `${f.clients?.store_name ?? '—'} via ${f.vas?.name ?? '—'}: ${preview}`, href: '/admin/clients' })
+      items.push({ key: 'prompt_requests', count: pr0.length, label: `${pr0.length} optimization request${pr0.length !== 1 ? 's' : ''} pending review`, preview: `${f.clients?.store_name ?? '—'} via ${f.vas?.name ?? '—'}: ${preview}`, href: '/admin/requests' })
     }
 
     type CustomReqR = { client_id: string; created_at: string; clients: { store_name: string; va_id: string; vas: { name: string } } | null }

@@ -414,6 +414,8 @@ export type PromptRequest = {
   file_urls: string[]
   file_names: string[]
   file_paths?: string[]
+  structured_data?: Record<string, unknown> | null
+  linked_prompt_id?: string | null
   status: 'submitted' | 'reviewed' | 'applied' | 'rejected'
   admin_response: string | null
   reviewed_by: string | null

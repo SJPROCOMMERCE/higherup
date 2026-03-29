@@ -1642,6 +1642,25 @@ export default function AdminPromptsPage() {
 
   useEffect(() => { load() }, [load])
 
+  // ── Deep link: ?edit=[id] ───────────────────────────────────────────────────
+
+  useEffect(() => {
+    const editParam = typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('edit')
+      : null
+    if (editParam && prompts.length > 0) {
+      const found = prompts.find(p => p.id === editParam)
+      if (found) {
+        setExpanded(editParam)
+        startEdit(found)
+        setTimeout(() => {
+          document.getElementById(`prompt-row-${editParam}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prompts])
+
   // ── Edit handlers ──────────────────────────────────────────────────────────
 
   function startEdit(prompt: Prompt) {
@@ -2180,6 +2199,7 @@ export default function AdminPromptsPage() {
         <div style={{ fontSize: 13, color: T.ghost, paddingTop: 20 }}>No templates match your filter.</div>
       ) : (
         filtered.map(prompt => (
+          <div key={prompt.id} id={`prompt-row-${prompt.id}`}>
           <PromptRow
             key={prompt.id}
             prompt={prompt}
@@ -2214,6 +2234,7 @@ export default function AdminPromptsPage() {
               })
             }}
           />
+          </div>
         ))
       )}
 
