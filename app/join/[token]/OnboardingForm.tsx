@@ -632,10 +632,10 @@ export function OnboardingForm({ token: _token, inviteId }: { token: string; inv
                 minutes.
               </RevealText>
               <RevealText delay={2000} style={{ fontSize: 15, color: C.gray, lineHeight: 1.65 }}>
-                To optimize 200 products<br />on HigherUp.
+                To list 25 products<br />on HigherUp.
               </RevealText>
               <RevealText delay={3200} style={{ fontSize: 15, fontWeight: 500, color: C.black, marginTop: 20 }}>
-                One upload. 200 products. Done.
+                One upload. 25 products. Done.
               </RevealText>
             </RevealScreen>
           )}
@@ -846,7 +846,7 @@ export function OnboardingForm({ token: _token, inviteId }: { token: string; inv
               </RevealText>
               <RevealText delay={2600} style={{ fontSize: 15, color: C.gray, lineHeight: 1.65 }}>
                 You upload their products.<br />
-                One CSV. 200 listings. About 2 minutes.<br />
+                One CSV. 25 listings. About 2 minutes.<br />
                 They pay every month, like clockwork.
               </RevealText>
               <RevealText delay={3800} style={{ fontSize: 15, fontWeight: 500, color: C.black, marginTop: 20 }}>
