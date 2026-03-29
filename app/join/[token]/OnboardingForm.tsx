@@ -220,7 +220,7 @@ function StepSlider({
   return (
     <div style={{ textAlign: 'center' }}>
       <RevealText delay={0} style={{ fontSize: 22, fontWeight: 300, color: C.black, lineHeight: 1.4, marginBottom: 40 }}>
-        How many clients do you want?
+        How many clients do you hope to manage?
       </RevealText>
 
       <div style={{
@@ -255,14 +255,14 @@ function StepSlider({
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-around' }}>
           <div>
-            <div style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.ghost, marginBottom: 8 }}>Per month</div>
+            <div style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.ghost, marginBottom: 8 }}>Per month · est.</div>
             <div style={{ fontSize: bigN(32), fontWeight: 700, color: C.black, letterSpacing: '-0.02em' }}>
               ${m.toLocaleString()}
             </div>
           </div>
           <div style={{ width: 1, background: C.border }} />
           <div>
-            <div style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.ghost, marginBottom: 8 }}>Per year</div>
+            <div style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.ghost, marginBottom: 8 }}>Per year · est.</div>
             <div style={{ fontSize: bigN(32), fontWeight: 700, color: C.green, letterSpacing: '-0.02em' }}>
               ${y.toLocaleString()}
             </div>
