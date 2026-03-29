@@ -1519,7 +1519,6 @@ function NewPromptModal({
       is_active:               draft.is_active,
       is_default:              draft.is_default,
       version:                 1,
-      usage_count:             0,
     })
     if (err) { setError(err.message); setSaving(false); return }
     void logActivity({
@@ -1800,7 +1799,6 @@ export default function AdminPromptsPage() {
       is_default:              false,
       parent_prompt_id:        prompt.id,
       version:                 1,
-      usage_count:             0,
       created_by:              'admin',
     })
     setDuplicating(null)
