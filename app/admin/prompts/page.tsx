@@ -307,6 +307,8 @@ type DraftPrompt = {
   language: string
   market: string
   system_prompt: string
+  title_prompt: string
+  description_prompt: string
   title_instructions: string
   description_instructions: string
   seo_instructions: string
@@ -337,6 +339,8 @@ function toDraft(p: Prompt): DraftPrompt {
     language:                 p.language ?? '',
     market:                   p.market ?? '',
     system_prompt:            p.system_prompt ?? '',
+    title_prompt:             p.title_prompt ?? '',
+    description_prompt:       p.description_prompt ?? '',
     title_instructions:       p.title_instructions ?? '',
     description_instructions: p.description_instructions ?? '',
     seo_instructions:         p.seo_instructions ?? '',
@@ -410,6 +414,31 @@ function EditForm({
       </div>
       <div style={{ fontSize: 12, color: T.ghost, marginBottom: 4 }}>
         This is the primary instruction. Be specific about tone, role, output format, and what to do with the product data.
+      </div>
+
+      {/* ── Full Prompts ──────────────────────────────────────────── */}
+      <SectionLabel>Full Prompts</SectionLabel>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+        <div>
+          <FieldLabel>Title prompt</FieldLabel>
+          <TextArea
+            value={draft.title_prompt}
+            onChange={set('title_prompt')}
+            placeholder="Full prompt document for title optimisation…"
+            rows={8}
+            mono
+          />
+        </div>
+        <div>
+          <FieldLabel>Description prompt</FieldLabel>
+          <TextArea
+            value={draft.description_prompt}
+            onChange={set('description_prompt')}
+            placeholder="Full prompt document for description optimisation…"
+            rows={8}
+            mono
+          />
+        </div>
       </div>
 
       {/* ── Field Instructions ────────────────────────────────────── */}
@@ -1370,7 +1399,8 @@ function PromptRow({
 
 const emptyDraft = (): DraftPrompt => ({
   name: '', description: '', niche: '', language: '', market: '',
-  system_prompt: '', title_instructions: '', description_instructions: '',
+  system_prompt: '', title_prompt: '', description_prompt: '',
+  title_instructions: '', description_instructions: '',
   seo_instructions: '', formatting_rules: '', alt_text_instructions: '',
   filename_instructions: '', tags_instructions: '', price_rules_instructions: '',
   tone_examples: '', title_examples: '', description_examples: '',
@@ -1415,6 +1445,8 @@ function NewPromptModal({
       language:                 draft.language || null,
       market:                   draft.market || null,
       system_prompt:            draft.system_prompt || null,
+      title_prompt:             draft.title_prompt || null,
+      description_prompt:       draft.description_prompt || null,
       title_instructions:       draft.title_instructions || null,
       description_instructions: draft.description_instructions || null,
       seo_instructions:         draft.seo_instructions || null,
@@ -1603,6 +1635,8 @@ export default function AdminPromptsPage() {
       language:                 editDraft.language || null,
       market:                   editDraft.market || null,
       system_prompt:            editDraft.system_prompt || null,
+      title_prompt:             editDraft.title_prompt || null,
+      description_prompt:       editDraft.description_prompt || null,
       title_instructions:       editDraft.title_instructions || null,
       description_instructions: editDraft.description_instructions || null,
       seo_instructions:         editDraft.seo_instructions || null,
@@ -1650,6 +1684,8 @@ export default function AdminPromptsPage() {
       language:                 prompt.language,
       market:                   prompt.market,
       system_prompt:            prompt.system_prompt,
+      title_prompt:             prompt.title_prompt,
+      description_prompt:       prompt.description_prompt,
       title_instructions:       prompt.title_instructions,
       description_instructions: prompt.description_instructions,
       seo_instructions:         prompt.seo_instructions,
