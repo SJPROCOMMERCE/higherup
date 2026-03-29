@@ -341,6 +341,44 @@ ALTER TABLE client_profiles ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all on client_profiles" ON client_profiles;
 CREATE POLICY "Allow all on client_profiles" ON client_profiles FOR ALL USING (true) WITH CHECK (true);
 
+ALTER TABLE client_profiles
+  ADD COLUMN IF NOT EXISTS custom_requirements BOOLEAN,
+  ADD COLUMN IF NOT EXISTS custom_data         JSONB;
+
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 12. PROMPT REQUESTS
+-- ───────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS prompt_requests (
+  id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id         UUID        NOT NULL REFERENCES clients(id)  ON DELETE CASCADE,
+  va_id             UUID        NOT NULL REFERENCES vas(id)      ON DELETE CASCADE,
+  message           TEXT,
+  file_urls         TEXT[]      NOT NULL DEFAULT '{}',
+  file_names        TEXT[]      NOT NULL DEFAULT '{}',
+  file_paths        TEXT[]               DEFAULT '{}',
+  structured_data   JSONB,
+  linked_prompt_id  UUID        REFERENCES prompts(id) ON DELETE SET NULL,
+  status            TEXT        NOT NULL DEFAULT 'submitted'
+                    CHECK (status IN ('submitted', 'reviewed', 'applied', 'rejected')),
+  admin_response    TEXT,
+  reviewed_by       TEXT,
+  reviewed_at       TIMESTAMPTZ,
+  applied_at        TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE prompt_requests ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all on prompt_requests" ON prompt_requests;
+CREATE POLICY "Allow all on prompt_requests"
+  ON prompt_requests FOR ALL USING (true) WITH CHECK (true);
+
+CREATE INDEX IF NOT EXISTS idx_prompt_requests_va_id     ON prompt_requests (va_id);
+CREATE INDEX IF NOT EXISTS idx_prompt_requests_client_id ON prompt_requests (client_id);
+CREATE INDEX IF NOT EXISTS idx_prompt_requests_status    ON prompt_requests (status);
+
 
 -- ───────────────────────────────────────────────────────────────────────────
 -- KLAAR — controleer de uploads kolommen
