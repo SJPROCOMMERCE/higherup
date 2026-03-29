@@ -399,6 +399,7 @@ export type PromptRequest = {
   message: string | null
   file_urls: string[]
   file_names: string[]
+  file_paths?: string[]
   status: 'submitted' | 'reviewed' | 'applied' | 'rejected'
   admin_response: string | null
   reviewed_by: string | null

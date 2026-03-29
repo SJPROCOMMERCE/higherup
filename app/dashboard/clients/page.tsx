@@ -224,6 +224,7 @@ function ClientRow({
   const [rateSaved,   setRateSaved]   = useState(false)
 
   // ── Prompt request state ─────────────────────────────────────────────────
+  const [activeTab, setActiveTab]           = useState<'info' | 'requests'>('info')
   const [requestMessage, setRequestMessage] = useState('')
   const [uploadedFiles, setUploadedFiles]   = useState<File[]>([])
   const [submitting, setSubmitting]         = useState(false)
@@ -239,7 +240,15 @@ function ClientRow({
     setRequestHistory((data || []) as PromptRequest[])
   }
 
-  // Load request history when expanded
+  // Load request history when expanded or tab switches to requests
+  useEffect(() => {
+    if (isExpanded && activeTab === 'requests') {
+      void loadRequestHistory()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isExpanded, activeTab, client.id])
+
+  // Also load when first expanded
   useEffect(() => {
     if (isExpanded) {
       void loadRequestHistory()
@@ -247,19 +256,27 @@ function ClientRow({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isExpanded, client.id])
 
-  async function uploadRequestFiles(files: File[]): Promise<{ urls: string[]; names: string[] }> {
+  function formatFileSize(bytes: number): string {
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB'
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  }
+
+  async function uploadRequestFiles(files: File[]): Promise<{ urls: string[]; names: string[]; paths: string[] }> {
     const urls: string[] = []
     const names: string[] = []
+    const paths: string[] = []
     for (const file of files) {
-      if (file.size > 5 * 1024 * 1024) { alert(`${file.name} is too large. Max 5MB.`); continue }
-      const path = `${client.id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
-      const { error } = await supabase.storage.from('prompt-requests').upload(path, file)
-      if (error) { console.error('Upload failed:', file.name, error.message); continue }
-      const { data: urlData } = supabase.storage.from('prompt-requests').getPublicUrl(path)
-      urls.push(urlData.publicUrl)
+      if (file.size > 5 * 1024 * 1024) { alert(`${file.name} exceeds 5MB limit.`); continue }
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const path = `${client.id}/${Date.now()}-${safeName}`
+      const { error } = await supabase.storage.from('prompt-requests').upload(path, file, { upsert: false })
+      if (error) { console.error('[UPLOAD]', file.name, error.message); alert(`Upload failed: ${file.name} — ${error.message}`); continue }
+      const { data: signed } = await supabase.storage.from('prompt-requests').createSignedUrl(path, 60 * 60 * 24 * 365)
+      paths.push(path)
       names.push(file.name)
+      urls.push(signed?.signedUrl ?? path)
     }
-    return { urls, names }
+    return { urls, names, paths }
   }
 
   async function handleSubmitRequest() {
@@ -270,20 +287,27 @@ function ClientRow({
 
     let fileUrls: string[] = []
     let fileNames: string[] = []
+    let filePaths: string[] = []
     if (files.length > 0) {
       const result = await uploadRequestFiles(files)
       fileUrls = result.urls
       fileNames = result.names
+      filePaths = result.paths
     }
 
-    const { error } = await supabase.from('prompt_requests').insert({
+    const insertPayload: Record<string, unknown> = {
       client_id: client.id,
       va_id: currentVA?.id,
       message: msg.trim() || null,
       file_urls: fileUrls,
       file_names: fileNames,
       status: 'submitted',
-    })
+    }
+    if (filePaths.length > 0) {
+      insertPayload.file_paths = filePaths
+    }
+
+    const { error } = await supabase.from('prompt_requests').insert(insertPayload)
 
     if (error) { alert('Failed: ' + error.message); setSubmitting(false); return }
 
@@ -422,6 +446,37 @@ function ClientRow({
       {/* ── Expanded ────────────────────────────────────────────────── */}
       {isExpanded && (
         <div style={{ paddingBottom: 24, paddingLeft: 21 }}>
+
+          {/* ── Tab switcher ────────────────────────────────────────── */}
+          <div style={{ display: 'flex', gap: 24, borderBottom: '1px solid #F0F0F0', marginBottom: 24 }}>
+            {(['info', 'requests'] as const).map(tab => {
+              const isActive = activeTab === tab
+              const pendingCount = tab === 'requests'
+                ? requestHistory.filter(r => r.status === 'submitted').length
+                : 0
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setActiveTab(tab)}
+                  style={{
+                    fontSize: 14, fontWeight: isActive ? 500 : 400,
+                    color: isActive ? '#111111' : '#CCCCCC',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    paddingBottom: 12, paddingLeft: 0, paddingRight: 0,
+                    borderBottom: isActive ? '2px solid #111111' : '2px solid transparent',
+                    fontFamily: 'inherit', transition: 'color 0.15s',
+                    marginBottom: -1,
+                  }}
+                >
+                  {tab === 'info' ? 'Client info' : `Optimization requests${pendingCount > 0 ? ` (${pendingCount})` : ''}`}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* ── Client info tab ─────────────────────────────────────── */}
+          {activeTab === 'info' && (<>
 
           {/* ── Rejection notice ────────────────────────────────────── */}
           {client.approval_status === 'rejected' && client.rejection_reason && (
@@ -635,136 +690,6 @@ function ClientRow({
             </div>
           </div>
 
-          {/* ── OPTIMIZATION PREFERENCES ────────────────────────────── */}
-          <div style={{ marginTop: 32, paddingTop: 24, borderTop: '1px solid #F5F5F5' }}>
-            <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: '#CCCCCC', textTransform: 'uppercase', marginBottom: 8 }}>
-              OPTIMIZATION PREFERENCES
-            </p>
-            <p style={{ fontSize: 13, color: '#999999', marginBottom: 16 }}>
-              Tell us what your client wants. We&apos;ll set up their optimization template.
-            </p>
-
-            {showSuccess ? (
-              <div style={{ padding: '16px 0', textAlign: 'center' }}>
-                <p style={{ fontSize: 14, color: '#2DB87E' }}>Request submitted ✓</p>
-                <p style={{ fontSize: 12, color: '#CCCCCC', marginTop: 4 }}>We&apos;ll review it and update the template.</p>
-              </div>
-            ) : (
-              <>
-                <textarea
-                  value={requestMessage}
-                  onChange={(e) => setRequestMessage(e.target.value)}
-                  placeholder="e.g. Short titles, brand name first, no emoji, formal tone, focus on keywords like 'luxury' and 'premium'..."
-                  maxLength={2000}
-                  style={{
-                    width: '100%', minHeight: 120, padding: '12px 14px',
-                    fontSize: 14, color: '#111111', border: '1px solid #EEEEEE',
-                    borderRadius: 10, outline: 'none', resize: 'vertical',
-                    fontFamily: 'inherit', boxSizing: 'border-box',
-                    background: 'white',
-                  }}
-                  onFocus={e => { e.currentTarget.style.borderColor = '#111111' }}
-                  onBlur={e => { e.currentTarget.style.borderColor = '#EEEEEE' }}
-                />
-                <p style={{ fontSize: 11, color: '#DDDDDD', textAlign: 'right', marginTop: 4 }}>
-                  {requestMessage.length}/2000
-                </p>
-
-                {/* File attachments */}
-                <div style={{ marginTop: 16 }}>
-                  <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: '#CCCCCC', textTransform: 'uppercase', marginBottom: 8 }}>
-                    ATTACHMENTS
-                  </p>
-                  {uploadedFiles.map((file, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                      <span style={{ fontSize: 13, color: '#111111' }}>{file.name}</span>
-                      <span style={{ fontSize: 11, color: '#CCCCCC' }}>({(file.size / 1024).toFixed(0)}KB)</span>
-                      <button
-                        type="button"
-                        onClick={() => setUploadedFiles(prev => prev.filter((_, j) => j !== i))}
-                        style={{ fontSize: 14, color: '#CCCCCC', background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1 }}
-                      >×</button>
-                    </div>
-                  ))}
-                  {uploadedFiles.length < 5 && (
-                    <label style={{ fontSize: 13, color: '#CCCCCC', cursor: 'pointer', display: 'inline-block', marginTop: 4 }}>
-                      + Add file
-                      <input
-                        type="file" multiple
-                        accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.txt,.csv"
-                        style={{ display: 'none' }}
-                        onChange={(e) => {
-                          const files = Array.from(e.target.files || [])
-                          const allowed = files.slice(0, 5 - uploadedFiles.length)
-                          setUploadedFiles(prev => [...prev, ...allowed])
-                          e.target.value = ''
-                        }}
-                      />
-                    </label>
-                  )}
-                  <p style={{ fontSize: 11, color: '#DDDDDD', marginTop: 6 }}>Max 5 files · 5MB each</p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => void handleSubmitRequest()}
-                  disabled={submitting || (!requestMessage.trim() && uploadedFiles.length === 0)}
-                  style={{
-                    marginTop: 20, padding: '12px 32px', borderRadius: 10,
-                    fontSize: 14, fontWeight: 500, border: 'none', cursor: 'pointer',
-                    background: (requestMessage.trim() || uploadedFiles.length > 0) ? '#111111' : '#F5F5F5',
-                    color: (requestMessage.trim() || uploadedFiles.length > 0) ? 'white' : '#CCCCCC',
-                  }}
-                >
-                  {submitting ? 'Submitting…' : 'Submit request'}
-                </button>
-              </>
-            )}
-
-            {/* PREVIOUS REQUESTS */}
-            {requestHistory.length > 0 && (
-              <div style={{ marginTop: 32 }}>
-                <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: '#CCCCCC', textTransform: 'uppercase', marginBottom: 12 }}>
-                  PREVIOUS REQUESTS
-                </p>
-                {requestHistory.map(req => {
-                  const statusMap: Record<string, { color: string; label: string }> = {
-                    submitted: { color: '#F59E0B', label: 'Submitted' },
-                    reviewed:  { color: '#3B82F6', label: 'Reviewed' },
-                    applied:   { color: '#2DB87E', label: 'Applied ✓' },
-                    rejected:  { color: '#999999', label: 'Not applicable' },
-                  }
-                  const s = statusMap[req.status] || statusMap.submitted
-                  return (
-                    <div key={req.id} style={{ paddingTop: 16, borderTop: '1px solid #F5F5F5', marginTop: 12 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 12, color: '#CCCCCC' }}>
-                          {new Date(req.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                        </span>
-                        <span style={{ fontSize: 11, fontWeight: 500, color: s.color }}>{s.label}</span>
-                      </div>
-                      {req.message && (
-                        <p style={{ marginTop: 6, fontSize: 13, color: '#999999', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                          {req.message}
-                        </p>
-                      )}
-                      {Array.isArray(req.file_names) && req.file_names.length > 0 && (
-                        <p style={{ marginTop: 4, fontSize: 12, color: '#CCCCCC' }}>
-                          📎 {req.file_names.length} file{req.file_names.length > 1 ? 's' : ''}
-                        </p>
-                      )}
-                      {req.admin_response && (
-                        <div style={{ marginTop: 8, paddingLeft: 12, borderLeft: '2px solid #F0F0F0' }}>
-                          <p style={{ fontSize: 12, color: '#999999' }}>{req.admin_response}</p>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-
           {/* ── Actions ─────────────────────────────────────────────── */}
           {client.approval_status === 'approved' && client.is_active && (
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 20, flexWrap: 'wrap' }}>
@@ -812,6 +737,122 @@ function ClientRow({
           {client.approval_status === 'rejected' && (
             <div style={{ marginTop: 16, fontSize: 13, color: T.ter }}>
               This client was rejected and cannot be used.
+            </div>
+          )}
+
+          </>)}
+
+          {/* ── Optimization requests tab ───────────────────────────── */}
+          {activeTab === 'requests' && (
+            <div>
+              <p style={{ fontSize: 18, fontWeight: 400, color: '#111111', marginBottom: 6 }}>What does your client need?</p>
+              <p style={{ fontSize: 13, color: '#999999', marginBottom: 20 }}>
+                Share preferences, brand guidelines, or examples. We&apos;ll build a custom optimization template.
+              </p>
+
+              {showSuccess ? (
+                <div style={{ padding: '20px 0', textAlign: 'center' }}>
+                  <p style={{ fontSize: 15, color: '#2DB87E', fontWeight: 500 }}>Request submitted ✓</p>
+                  <p style={{ fontSize: 13, color: '#CCCCCC', marginTop: 6 }}>We&apos;ll review it and update the template.</p>
+                </div>
+              ) : (
+                <>
+                  <textarea
+                    value={requestMessage}
+                    onChange={e => setRequestMessage(e.target.value)}
+                    placeholder={'e.g. "Short titles, brand name first, no emoji. Formal tone. UK market. Always mention material and size."'}
+                    maxLength={2000}
+                    rows={6}
+                    style={{ width: '100%', padding: '12px 14px', fontSize: 14, color: '#111111', border: '1px solid #EEEEEE', borderRadius: 10, outline: 'none', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box', background: 'white', transition: 'border-color 0.15s' }}
+                    onFocus={e => { e.currentTarget.style.borderColor = '#111111' }}
+                    onBlur={e => { e.currentTarget.style.borderColor = '#EEEEEE' }}
+                  />
+                  <p style={{ fontSize: 11, color: '#DDDDDD', textAlign: 'right', marginTop: 4 }}>
+                    {requestMessage.length}/2000
+                  </p>
+
+                  <div style={{ marginTop: 20 }}>
+                    <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: '#CCCCCC', textTransform: 'uppercase', marginBottom: 10 }}>ATTACHMENTS</p>
+                    {uploadedFiles.map((file, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                        <span style={{ fontSize: 13, color: '#111111', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
+                        <span style={{ fontSize: 11, color: '#CCCCCC', flexShrink: 0 }}>{formatFileSize(file.size)}</span>
+                        <button type="button" onClick={() => setUploadedFiles(prev => prev.filter((_, j) => j !== i))} style={{ fontSize: 16, color: '#CCCCCC', background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>×</button>
+                      </div>
+                    ))}
+                    {uploadedFiles.length < 5 && (
+                      <label
+                        style={{ display: 'inline-block', marginTop: 6, fontSize: 13, color: '#CCCCCC', cursor: 'pointer' }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#111111' }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#CCCCCC' }}
+                      >
+                        + Add file
+                        <input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.txt,.csv" style={{ display: 'none' }}
+                          onChange={e => {
+                            const newFiles = Array.from(e.target.files || [])
+                            const combined = [...uploadedFiles, ...newFiles].slice(0, 5)
+                            const oversized = combined.filter(f => f.size > 5 * 1024 * 1024)
+                            if (oversized.length > 0) { alert(`Files exceed 5MB: ${oversized.map(f => f.name).join(', ')}`); return }
+                            setUploadedFiles(combined)
+                            e.target.value = ''
+                          }}
+                        />
+                      </label>
+                    )}
+                    <p style={{ fontSize: 11, color: '#DDDDDD', marginTop: 6 }}>Max 5 files · 5MB each</p>
+                  </div>
+
+                  <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end' }}>
+                    <button
+                      type="button"
+                      onClick={() => void handleSubmitRequest()}
+                      disabled={submitting || (!requestMessage.trim() && uploadedFiles.length === 0)}
+                      style={{ padding: '12px 32px', borderRadius: 10, fontSize: 14, fontWeight: 500, border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: (requestMessage.trim() || uploadedFiles.length > 0) && !submitting ? '#111111' : '#F5F5F5', color: (requestMessage.trim() || uploadedFiles.length > 0) && !submitting ? 'white' : '#CCCCCC', transition: 'opacity 0.15s' }}
+                    >
+                      {submitting ? 'Submitting…' : 'Submit request'}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* History */}
+              {requestHistory.length > 0 && (
+                <div style={{ marginTop: 36 }}>
+                  <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: '#CCCCCC', textTransform: 'uppercase', marginBottom: 4 }}>HISTORY</p>
+                  {requestHistory.map((req, idx) => {
+                    const statusMap: Record<string, { color: string; label: string }> = {
+                      submitted: { color: '#F59E0B', label: 'Submitted' },
+                      reviewed:  { color: '#3B82F6', label: 'Reviewed' },
+                      applied:   { color: '#2DB87E', label: 'Applied ✓' },
+                      rejected:  { color: '#999999', label: 'Not applicable' },
+                    }
+                    const st = statusMap[req.status] || statusMap.submitted
+                    return (
+                      <div key={req.id} style={{ paddingTop: 16, paddingBottom: 16, borderBottom: idx < requestHistory.length - 1 ? '1px solid #F5F5F5' : 'none' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                          <span style={{ fontSize: 12, color: '#CCCCCC' }}>
+                            {new Date(req.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                          <span style={{ fontSize: 11, fontWeight: 500, color: st.color }}>{st.label}</span>
+                        </div>
+                        {req.message && (
+                          <p style={{ fontSize: 13, color: '#999999', marginBottom: 4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2 as unknown as number, WebkitBoxOrient: 'vertical' as const }}>
+                            &quot;{req.message}&quot;
+                          </p>
+                        )}
+                        {Array.isArray(req.file_names) && req.file_names.length > 0 && (
+                          <p style={{ fontSize: 12, color: '#CCCCCC', marginBottom: 4 }}>📎 {req.file_names.length} file{req.file_names.length !== 1 ? 's' : ''}</p>
+                        )}
+                        {req.admin_response && (
+                          <div style={{ marginTop: 8, paddingLeft: 12, borderLeft: '2px solid #E8E8E8' }}>
+                            <p style={{ fontSize: 12, color: '#999999' }}>{req.admin_response}</p>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
 

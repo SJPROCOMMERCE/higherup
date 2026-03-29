@@ -331,6 +331,12 @@ function ClientDetail({
     setPromptRequests((data || []) as unknown as PromptRequest[])
   }
 
+  async function getSignedUrl(pathOrUrl: string): Promise<string> {
+    if (pathOrUrl.startsWith('http')) return pathOrUrl
+    const { data } = await supabase.storage.from('prompt-requests').createSignedUrl(pathOrUrl, 3600)
+    return data?.signedUrl || ''
+  }
+
   async function markRequestReviewed(requestId: string) {
     await supabase.from('prompt_requests').update({
       status: 'reviewed',
@@ -810,6 +816,7 @@ function ClientDetail({
                 const s = statusMap[req.status] || statusMap.submitted
                 const isPending = req.status === 'submitted' || req.status === 'reviewed'
                 const fileUrls = (req as unknown as { file_urls?: string[] }).file_urls ?? []
+                const filePaths = (req as unknown as { file_paths?: string[] }).file_paths ?? []
                 const fileNames = req.file_names ?? []
                 return (
                   <div key={req.id} style={{ paddingTop: 16, borderTop: `1px solid ${T.div}`, marginTop: 12 }}>
@@ -822,13 +829,22 @@ function ClientDetail({
                     </div>
                     {req.message && <p style={{ fontSize: 13, color: T.sec, marginBottom: 8 }}>{req.message}</p>}
                     {Array.isArray(fileNames) && fileNames.map((name: string, i: number) => {
-                      const url = fileUrls[i]
+                      const pathOrUrl = filePaths[i] || fileUrls[i] || ''
                       const isImage = /\.(png|jpg|jpeg|gif|webp)$/i.test(name)
                       return (
                         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                          {isImage && url && <img src={url} alt={name} style={{ width: 40, height: 40, borderRadius: 4, objectFit: 'cover' }} />}
-                          <span style={{ fontSize: 13, color: T.black }}>{name}</span>
-                          {url && <button type="button" onClick={() => window.open(url, '_blank')} style={{ fontSize: 12, color: T.ghost, background: 'none', border: 'none', cursor: 'pointer' }}>View</button>}
+                          {isImage && fileUrls[i] && <img src={fileUrls[i]} alt={name} style={{ width: 40, height: 40, borderRadius: 4, objectFit: 'cover' }} />}
+                          <span style={{ fontSize: 13, color: T.black, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📎 {name}</span>
+                          {pathOrUrl && (
+                            <button type="button" onClick={async () => { const url = await getSignedUrl(pathOrUrl); if (url) window.open(url, '_blank') }} style={{ fontSize: 12, color: T.ghost, background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}
+                              onMouseEnter={e => { e.currentTarget.style.color = T.black }}
+                              onMouseLeave={e => { e.currentTarget.style.color = T.ghost }}>View</button>
+                          )}
+                          {pathOrUrl && (
+                            <button type="button" onClick={async () => { const url = await getSignedUrl(pathOrUrl); if (url) { const a = document.createElement('a'); a.href = url; a.download = name; a.click() } }} style={{ fontSize: 12, color: T.ghost, background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}
+                              onMouseEnter={e => { e.currentTarget.style.color = T.black }}
+                              onMouseLeave={e => { e.currentTarget.style.color = T.ghost }}>↓</button>
+                          )}
                         </div>
                       )
                     })}
@@ -844,14 +860,20 @@ function ClientDetail({
                           value={adminResponses[req.id] || ''}
                           onChange={(e) => setAdminResponses(prev => ({ ...prev, [req.id]: e.target.value }))}
                           placeholder="What was changed or why rejected..."
-                          style={{ width: '100%', paddingBottom: 6, fontSize: 13, color: T.black, border: 'none', borderBottom: `1px solid ${T.div}`, outline: 'none', background: 'transparent', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                          style={{ width: '100%', paddingBottom: 6, fontSize: 13, color: T.black, border: 'none', borderBottom: `1px solid ${T.div}`, outline: 'none', background: 'transparent', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border-color 0.15s' }}
                           onFocus={e => { e.currentTarget.style.borderBottomColor = T.black }}
                           onBlur={e => { e.currentTarget.style.borderBottomColor = T.div }}
                         />
                         <div style={{ display: 'flex', gap: 16, marginTop: 10 }}>
-                          <button type="button" onClick={() => void markRequestReviewed(req.id)} style={{ fontSize: 12, color: T.ghost, background: 'none', border: 'none', cursor: 'pointer' }}>Mark as reviewed</button>
-                          <button type="button" onClick={() => void markRequestApplied(req.id, req.va_id, client.store_name)} style={{ fontSize: 12, color: T.ghost, background: 'none', border: 'none', cursor: 'pointer' }}>Mark as applied</button>
-                          <button type="button" onClick={() => void rejectRequest(req.id, req.va_id, client.store_name)} style={{ fontSize: 12, color: T.ghost, background: 'none', border: 'none', cursor: 'pointer' }}>Reject</button>
+                          <button type="button" onClick={() => void markRequestReviewed(req.id)} style={{ fontSize: 12, color: T.ghost, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+                            onMouseEnter={e => { e.currentTarget.style.color = '#3B82F6' }}
+                            onMouseLeave={e => { e.currentTarget.style.color = T.ghost }}>Mark as reviewed</button>
+                          <button type="button" onClick={() => void markRequestApplied(req.id, req.va_id, client.store_name)} style={{ fontSize: 12, color: T.ghost, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+                            onMouseEnter={e => { e.currentTarget.style.color = '#2DB87E' }}
+                            onMouseLeave={e => { e.currentTarget.style.color = T.ghost }}>Mark as applied</button>
+                          <button type="button" onClick={() => void rejectRequest(req.id, req.va_id, client.store_name)} style={{ fontSize: 12, color: T.ghost, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+                            onMouseEnter={e => { e.currentTarget.style.color = '#EF4444' }}
+                            onMouseLeave={e => { e.currentTarget.style.color = T.ghost }}>Reject</button>
                         </div>
                       </div>
                     )}
