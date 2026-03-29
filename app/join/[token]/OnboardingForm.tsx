@@ -884,7 +884,7 @@ export function OnboardingForm({ token: _token, inviteId }: { token: string; inv
           {step === 10 && (
             <RevealScreen onContinue={goForward} continueDelay={5500}>
               <RevealText delay={0} style={{ fontSize: 22, fontWeight: 300, color: C.black, lineHeight: 1.4, marginBottom: 48 }}>
-                Here&apos;s what {sliderGoal} {sliderGoal === 1 ? 'client' : 'clients'} looks like over time.
+                Here&apos;s what {sliderGoal} {sliderGoal === 1 ? 'client' : 'clients'} could look like over time.
               </RevealText>
               {([
                 { t: 400,  label: 'Month 1',  value: Math.round(sliderGoal * 0.4) * 130, note: 'Getting started'    },

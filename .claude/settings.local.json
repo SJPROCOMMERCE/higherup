@@ -86,7 +86,8 @@
       "Bash(grep -n \"avgSalary\\\\|avgHours\\\\|countryData\\\\|getCountry\" /Users/safouaneelajjouri/Documents/HigherUp/app/join/[token]/OnboardingForm.tsx)",
       "Bash(grep -n \"Step 9\\\\|Let''s talk money\\\\|per client, per month\\\\|One client.*130\\\\|step === 9\" /Users/safouaneelajjouri/Documents/HigherUp/app/join/[token]/OnboardingForm.tsx)",
       "Bash(grep -n \"goTo\\\\|TOTAL_STEPS\\\\|StepNum\\\\|next <= \" /Users/safouaneelajjouri/Documents/HigherUp/app/join/[token]/OnboardingForm.tsx)",
-      "Bash(grep -n \"How many clients\\\\|PER MONTH\\\\|PER YEAR\\\\|Per month\\\\|Per year\" /Users/safouaneelajjouri/Documents/HigherUp/app/join/[token]/OnboardingForm.tsx)"
+      "Bash(grep -n \"How many clients\\\\|PER MONTH\\\\|PER YEAR\\\\|Per month\\\\|Per year\" /Users/safouaneelajjouri/Documents/HigherUp/app/join/[token]/OnboardingForm.tsx)",
+      "Bash(grep -n \"looks like over time\" /Users/safouaneelajjouri/Documents/HigherUp/app/join/[token]/OnboardingForm.tsx)"
     ]
   }
 }
