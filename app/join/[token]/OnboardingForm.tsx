@@ -733,7 +733,7 @@ export function OnboardingForm({ token: _token, inviteId }: { token: string; inv
                 <CountUp end={800} prefix="$" suffix="+" delay={2600} duration={1400} />
               </div>
               <RevealText delay={3400} style={{ fontSize: 15, color: C.gray }}>
-                Working 3 hours a day. From home.
+                Working 1 hour a day. From home.
               </RevealText>
             </RevealScreen>
           )}
