@@ -1468,16 +1468,21 @@ function NewPromptModal({
   onCreated,
   initialNiche,
   initialLang,
+  prefill,
 }: {
   onClose: () => void
   onCreated: () => void
   initialNiche?: string
   initialLang?: string
+  prefill?: { name?: string; title_prompt?: string; description_prompt?: string }
 }) {
   const [draft,   setDraft]   = useState<DraftPrompt>(() => {
     const d = emptyDraft()
     if (initialNiche) d.niche = initialNiche
     if (initialLang) d.language = initialLang
+    if (prefill?.name) d.name = prefill.name
+    if (prefill?.title_prompt) d.title_prompt = prefill.title_prompt
+    if (prefill?.description_prompt) d.description_prompt = prefill.description_prompt
     return d
   })
   const [saving,  setSaving]  = useState(false)
@@ -1589,6 +1594,7 @@ export default function AdminPromptsPage() {
   const [showNew,      setShowNew]      = useState(false)
   const [newInitialNiche, setNewInitialNiche] = useState<string | undefined>(undefined)
   const [newInitialLang,  setNewInitialLang]  = useState<string | undefined>(undefined)
+  const [newPrefill, setNewPrefill] = useState<{ name?: string; title_prompt?: string; description_prompt?: string } | null>(null)
 
   // Feature: bulk operations
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -1641,6 +1647,26 @@ export default function AdminPromptsPage() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // ── Deep link: ?new=1 (pre-fill new prompt from client custom requirements) ──
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const sp = new URLSearchParams(window.location.search)
+    if (sp.get('new') === '1') {
+      setNewInitialNiche(sp.get('niche') || undefined)
+      setNewInitialLang(sp.get('language') || undefined)
+      setNewPrefill({
+        name: sp.get('name') || '',
+        title_prompt: sp.get('title_prompt') || '',
+        description_prompt: sp.get('description_prompt') || '',
+      })
+      setShowNew(true)
+      // Clean URL without reload
+      window.history.replaceState({}, '', '/admin/prompts')
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── Deep link: ?edit=[id] ───────────────────────────────────────────────────
 
@@ -2241,10 +2267,11 @@ export default function AdminPromptsPage() {
       {/* ── New prompt modal ───────────────────────────────────────── */}
       {showNew && (
         <NewPromptModal
-          onClose={() => setShowNew(false)}
-          onCreated={() => { setShowNew(false); load() }}
+          onClose={() => { setShowNew(false); setNewPrefill(null) }}
+          onCreated={() => { setShowNew(false); setNewPrefill(null); load() }}
           initialNiche={newInitialNiche}
           initialLang={newInitialLang}
+          prefill={newPrefill ?? undefined}
         />
       )}
     </div>

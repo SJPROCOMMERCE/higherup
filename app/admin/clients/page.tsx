@@ -406,6 +406,11 @@ function ClientDetail({
   }
 
   async function handleApprove() {
+    const hasCustom = detail?.profile?.custom_requirements === true
+    if (!approvePromptId && !hasCustom) {
+      alert('Please select a template before approving.')
+      return
+    }
     setApproving(true)
     const now = new Date().toISOString()
     const deadline = new Date(Date.now() + 48 * 3600 * 1000).toISOString()
@@ -417,7 +422,7 @@ function ClientDetail({
       deadline_48h: deadline,
       deadline_expired: false,
     }).eq('id', client.id)
-    // Upsert client_profiles
+    // Upsert client_profiles with prompt if selected
     if (approvePromptId) {
       const existing = await supabase.from('client_profiles').select('id').eq('client_id', client.id).maybeSingle()
       if (existing.data) {
@@ -425,17 +430,22 @@ function ClientDetail({
       } else {
         await supabase.from('client_profiles').insert({ client_id: client.id, prompt_id: approvePromptId, updated_at: now, updated_by: 'admin' })
       }
+      // Also add to client_prompts junction table
+      await supabase.from('client_prompts').insert({ client_id: client.id, prompt_id: approvePromptId, assigned_by: 'admin' }).select()
     }
-    // Notify VA
+    // Notify VA — custom message if no template yet
+    const notifMsg = hasCustom && !approvePromptId
+      ? `${client.store_name} is approved. We're setting up a custom template based on your requirements — you'll be notified when it's ready.`
+      : `${client.store_name} has been approved. You can now start uploading.`
     await supabase.from('notifications').insert({
       va_id: client.va_id,
       type: 'client_approved',
       title: 'Client approved',
-      message: `${client.store_name} has been approved.`,
+      message: notifMsg,
       is_read: false,
       created_at: now,
     })
-    const templateName = allPrompts.find(p => p.id === approvePromptId)?.name ?? '—'
+    const templateName = approvePromptId ? (allPrompts.find(p => p.id === approvePromptId)?.name ?? '—') : 'custom (pending)'
     void logActivity({ action: 'client_approved', details: `Approved client ${client.store_name} with template: ${templateName}`, client_id: client.id, source: 'admin', severity: 'info' })
     setApproveMode(false)
     setApproving(false)
@@ -995,12 +1005,91 @@ function ClientDetail({
                 </div>
                 {approveMode && (
                   <div style={{ marginTop: 16, padding: 16, background: T.row, borderRadius: 12 }}>
-                    <div style={{ fontSize: 12, color: T.sec, marginBottom: 8 }}>Select prompt template:</div>
+                    {/* Custom requirements panel */}
+                    {detail?.profile?.custom_requirements && (
+                      <div style={{ marginBottom: 16, padding: 12, background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#92400E', marginBottom: 6 }}>Custom requirements submitted</div>
+                        {detail.profile.custom_data && (() => {
+                          const cd = detail.profile.custom_data!
+                          return (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {cd.platform && <div style={{ fontSize: 12, color: T.black }}><span style={{ color: T.ter }}>Platform:</span> {cd.platform}</div>}
+                              {cd.maxDiscount && <div style={{ fontSize: 12, color: T.black }}><span style={{ color: T.ter }}>Max discount:</span> {cd.maxDiscount}%</div>}
+                              {cd.competitorPriceDiff && <div style={{ fontSize: 12, color: T.black }}><span style={{ color: T.ter }}>Vs competitors:</span> {cd.competitorPriceDiff}% under</div>}
+                              {cd.skuStructure && <div style={{ fontSize: 12, color: T.black }}><span style={{ color: T.ter }}>SKU:</span> {cd.skuStructure}</div>}
+                              {cd.avgStock && <div style={{ fontSize: 12, color: T.black }}><span style={{ color: T.ter }}>Avg stock:</span> {cd.avgStock}</div>}
+                              {cd.titlePrompt && (
+                                <div>
+                                  <div style={{ fontSize: 10, textTransform: 'uppercase', color: T.ter, marginBottom: 3 }}>Title prompt</div>
+                                  <div style={{ fontSize: 12, color: T.black, background: 'white', padding: '8px 10px', borderRadius: 6, border: `1px solid ${T.div}`, whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>{cd.titlePrompt}</div>
+                                </div>
+                              )}
+                              {cd.descriptionPrompt && (
+                                <div>
+                                  <div style={{ fontSize: 10, textTransform: 'uppercase', color: T.ter, marginBottom: 3 }}>Description prompt</div>
+                                  <div style={{ fontSize: 12, color: T.black, background: 'white', padding: '8px 10px', borderRadius: 6, border: `1px solid ${T.div}`, whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>{cd.descriptionPrompt}</div>
+                                </div>
+                              )}
+                              {cd.collections && (
+                                <div>
+                                  <div style={{ fontSize: 10, textTransform: 'uppercase', color: T.ter, marginBottom: 3 }}>Collections</div>
+                                  <div style={{ fontSize: 12, color: T.black, background: 'white', padding: '8px 10px', borderRadius: 6, border: `1px solid ${T.div}`, whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>{cd.collections}</div>
+                                </div>
+                              )}
+                              {cd.additionalNotes && (
+                                <div>
+                                  <div style={{ fontSize: 10, textTransform: 'uppercase', color: T.ter, marginBottom: 3 }}>Notes</div>
+                                  <div style={{ fontSize: 12, color: T.black, whiteSpace: 'pre-wrap' }}>{cd.additionalNotes}</div>
+                                </div>
+                              )}
+                              {promptRequests[0]?.file_names?.length > 0 && (
+                                <div>
+                                  <div style={{ fontSize: 10, textTransform: 'uppercase', color: T.ter, marginBottom: 3 }}>Attachments</div>
+                                  {promptRequests[0].file_names.map((name, i) => (
+                                    <button key={i} type="button"
+                                      onClick={async () => {
+                                        const path = promptRequests[0].file_paths?.[i] ?? promptRequests[0].file_urls?.[i] ?? ''
+                                        if (path.startsWith('http')) { window.open(path, '_blank'); return }
+                                        const { data } = await supabase.storage.from('prompt-requests').createSignedUrl(path, 3600)
+                                        if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+                                      }}
+                                      style={{ display: 'block', fontSize: 12, color: T.sec, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', textDecoration: 'underline', textAlign: 'left' }}
+                                    >{name}</button>
+                                  ))}
+                                </div>
+                              )}
+                              {(cd.titlePrompt || cd.descriptionPrompt) && (
+                                <button type="button"
+                                  onClick={() => {
+                                    const params = new URLSearchParams({
+                                      new: '1',
+                                      name: `Custom — ${client.store_name}`,
+                                      niche: client.niche ?? '',
+                                      language: client.language ?? '',
+                                      title_prompt: cd.titlePrompt ?? '',
+                                      description_prompt: cd.descriptionPrompt ?? '',
+                                    })
+                                    window.open(`/admin/prompts?${params.toString()}`, '_blank')
+                                  }}
+                                  style={{ fontSize: 12, color: T.ter, background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', textDecoration: 'underline', textAlign: 'left' }}
+                                >Create template from these requirements →</button>
+                              )}
+                            </div>
+                          )
+                        })()}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 12, color: T.sec, marginBottom: 8 }}>
+                      {detail?.profile?.custom_requirements ? 'Select template (optional — can assign later):' : 'Select prompt template:'}
+                    </div>
                     <PromptDropdown prompts={allPrompts} clientNiche={client.niche ?? null} clientLanguage={client.language ?? null} value={approvePromptId} onChange={setApprovePromptId} />
+                    {detail?.profile?.custom_requirements && !approvePromptId && (
+                      <div style={{ fontSize: 11, color: '#D97706', marginTop: 6 }}>Custom requirements submitted — you can approve now and assign a template after setup.</div>
+                    )}
                     <button
                       onClick={() => void handleApprove()}
-                      disabled={approving || !approvePromptId}
-                      style={{ marginTop: 12, padding: '8px 16px', background: T.black, color: T.bg, border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}
+                      disabled={approving || (!approvePromptId && !detail?.profile?.custom_requirements)}
+                      style={{ marginTop: 12, padding: '8px 16px', background: T.black, color: T.bg, border: 'none', borderRadius: 8, fontSize: 13, cursor: approving ? 'not-allowed' : 'pointer', opacity: (approving || (!approvePromptId && !detail?.profile?.custom_requirements)) ? 0.5 : 1 }}
                     >
                       {approving ? 'Approving…' : 'Confirm & approve'}
                     </button>
@@ -1139,12 +1228,17 @@ function ClientDetail({
                 </div>
                 {approveMode && (
                   <div style={{ marginTop: 16, padding: 16, background: T.row, borderRadius: 12 }}>
-                    <div style={{ fontSize: 12, color: T.sec, marginBottom: 8 }}>Select prompt template:</div>
+                    <div style={{ fontSize: 12, color: T.sec, marginBottom: 8 }}>
+                      {detail?.profile?.custom_requirements ? 'Select template (optional — can assign later):' : 'Select prompt template:'}
+                    </div>
                     <PromptDropdown prompts={allPrompts} clientNiche={client.niche ?? null} clientLanguage={client.language ?? null} value={approvePromptId} onChange={setApprovePromptId} />
+                    {detail?.profile?.custom_requirements && !approvePromptId && (
+                      <div style={{ fontSize: 11, color: '#D97706', marginTop: 6 }}>Custom requirements submitted — you can approve now and assign a template after setup.</div>
+                    )}
                     <button
                       onClick={() => void handleApprove()}
-                      disabled={approving || !approvePromptId}
-                      style={{ marginTop: 12, padding: '8px 16px', background: T.black, color: T.bg, border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}
+                      disabled={approving || (!approvePromptId && !detail?.profile?.custom_requirements)}
+                      style={{ marginTop: 12, padding: '8px 16px', background: T.black, color: T.bg, border: 'none', borderRadius: 8, fontSize: 13, cursor: approving ? 'not-allowed' : 'pointer', opacity: (approving || (!approvePromptId && !detail?.profile?.custom_requirements)) ? 0.5 : 1 }}
                     >
                       {approving ? 'Approving…' : 'Confirm & approve'}
                     </button>

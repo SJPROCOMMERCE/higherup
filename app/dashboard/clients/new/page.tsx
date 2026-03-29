@@ -618,40 +618,39 @@ export default function NewClientPage() {
       custom_data: hasCustomRequirements === true ? customData : null,
     })
 
-    // If custom requirements: also create a prompt_request
+    // If custom requirements: always create a prompt_request so admin sees it
     if (hasCustomRequirements === true) {
       const message = buildCustomRequirementsMessage(customData)
-      const hasContent = message.length > 0 || regSelectedFiles.length > 0
-      if (hasContent) {
-        // Upload files first
-        const fileUrls: string[] = []
-        const fileNames: string[] = []
-        const filePaths: string[] = []
 
-        for (const file of regSelectedFiles) {
-          if (file.size > 5 * 1024 * 1024) continue
-          const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-          const path = `${newClientId}/${Date.now()}-${safeName}`
-          const { error: uploadErr } = await supabase.storage.from('prompt-requests').upload(path, file, { upsert: false })
-          if (!uploadErr) {
-            const { data: signed } = await supabase.storage.from('prompt-requests').createSignedUrl(path, 60 * 60 * 24 * 365)
-            filePaths.push(path)
-            fileNames.push(file.name)
-            fileUrls.push(signed?.signedUrl ?? path)
-          }
+      // Upload files first
+      const fileUrls: string[] = []
+      const fileNames: string[] = []
+      const filePaths: string[] = []
+
+      for (const file of regSelectedFiles) {
+        if (file.size > 5 * 1024 * 1024) continue
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+        const path = `${newClientId}/${Date.now()}-${safeName}`
+        const { error: uploadErr } = await supabase.storage.from('prompt-requests').upload(path, file, { upsert: false })
+        if (!uploadErr) {
+          const { data: signed } = await supabase.storage.from('prompt-requests').createSignedUrl(path, 60 * 60 * 24 * 365)
+          filePaths.push(path)
+          fileNames.push(file.name)
+          fileUrls.push(signed?.signedUrl ?? path)
         }
-
-        await supabase.from('prompt_requests').insert({
-          client_id: newClientId,
-          va_id: currentVA.id,
-          message: message || null,
-          file_urls: fileUrls,
-          file_names: fileNames,
-          file_paths: filePaths,
-          structured_data: customData,
-          status: 'submitted',
-        })
       }
+
+      const { error: reqErr } = await supabase.from('prompt_requests').insert({
+        client_id: newClientId,
+        va_id: currentVA.id,
+        message: message || null,
+        file_urls: fileUrls,
+        file_names: fileNames,
+        file_paths: filePaths,
+        structured_data: customData,
+        status: 'submitted',
+      })
+      if (reqErr) console.error('[REGISTER] prompt_request insert failed:', reqErr)
     }
 
     void logActivity({

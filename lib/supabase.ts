@@ -377,9 +377,9 @@ export type PromptVersion = {
 export type CustomData = {
   maxDiscount: string
   competitorPriceDiff: string
-  platforms: string[]
-  titleFormat: string
-  descriptionFormat: string
+  platform: string
+  titlePrompt: string
+  descriptionPrompt: string
   skuStructure: string
   avgStock: string
   collections: string
