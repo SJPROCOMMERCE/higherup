@@ -808,9 +808,9 @@ export async function runPipeline(uploadId: string): Promise<void> {
   let notifMsg:   string
 
   if (vaRate != null && vaRate > 0) {
-    const earned = variantRows.length * vaRate
+    const earned = optimizedProducts * vaRate
     notifTitle = `+$${earned.toFixed(2)} earned — ${String(client.store_name)}`
-    notifMsg   = `${variantRows.length} products optimized.${partialMsg} Ready to download.`
+    notifMsg   = `${optimizedProducts} products optimized.${partialMsg} Ready to download.`
   } else {
     notifTitle = `${String(client.store_name)}: ${optimizedProducts} products optimized`
     notifMsg   = `${optimizedProducts < parentIndices.length ? `${parentIndices.length - optimizedProducts} product(s) could not be optimized and retain their original text. ` : ''}Ready to download.`
@@ -842,7 +842,7 @@ export async function runPipeline(uploadId: string): Promise<void> {
 
     const lockAmount = `$${(unpaidBill.total_amount as number).toFixed(0)}`
     const lockRate   = (client as unknown as Record<string, unknown>).va_rate_per_product as number | null | undefined
-    const lockEarned = lockRate != null && lockRate > 0 ? variantRows.length * lockRate : null
+    const lockEarned = lockRate != null && lockRate > 0 ? optimizedProducts * lockRate : null
 
     const lockTitle = lockEarned != null
       ? `File locked — pay ${lockAmount} to download your $${lockEarned.toFixed(2)} earnings`

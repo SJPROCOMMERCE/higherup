@@ -841,9 +841,9 @@ function UploadForm() {
     if (!parseResult) return
     setUploading(true); setSubmitError(null); setPreCheckPhase('idle')
     try {
-      // ── Variant rate limit: max 50,000 variants per VA per day ────────────
-      const MAX_DAILY_VARIANTS = 50_000
-      if (parseResult.rows > MAX_DAILY_VARIANTS)
+      // ── Product rate limit: max 50,000 unique products per VA per day ────────
+      const MAX_DAILY_PRODUCTS = 50_000
+      if (parseResult.productCount > MAX_DAILY_PRODUCTS)
         throw new Error(`This file exceeds the 50,000 product limit.`)
 
       const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0)
@@ -853,7 +853,7 @@ function UploadForm() {
         .eq('va_id', va!.id)
         .gte('uploaded_at', dayStart.toISOString())
       const usedToday = (todayUploads ?? []).reduce((s, u) => s + (u.product_row_count ?? 0), 0)
-      if (usedToday + parseResult.rows > MAX_DAILY_VARIANTS)
+      if (usedToday + parseResult.productCount > MAX_DAILY_PRODUCTS)
         throw new Error(`Daily product limit reached (${usedToday.toLocaleString()}/50,000). Try again tomorrow.`)
 
       const ts = Date.now()
@@ -891,8 +891,8 @@ function UploadForm() {
         file_size_bytes:      sheetSource ? null : file!.size,
         detected_as_shopify:  parseResult.isShopify,
         sheet_name:           parseResult.selectedSheet || null,
-        // Product counts
-        product_row_count:    parseResult.rows,
+        // Product counts — product_row_count = unique products (by Handle/Title)
+        product_row_count:    parseResult.productCount,
         unique_product_count: parseResult.productCount,
         // Instructions & pre-check
         special_instructions: instructions.trim() || null,
