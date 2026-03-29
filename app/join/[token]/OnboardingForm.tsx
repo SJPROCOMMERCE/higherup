@@ -123,7 +123,7 @@ function PrimaryBtn({ label = 'Continue →', disabled, onClick, loading }: {
         width: '100%', padding: '16px 0', borderRadius: 9999, border: 'none',
         fontSize: 15, fontWeight: 500,
         cursor:     on ? 'pointer' : 'not-allowed',
-        background: on ? C.black : '#F0F0F0',
+        background: on ? C.green : '#F0F0F0',
         color:      on ? C.white : '#CCCCCC',
         fontFamily: 'inherit', transition: 'opacity 0.15s',
       }}
@@ -145,7 +145,7 @@ function GhostBtn({ label, onClick, disabled }: { label: string; onClick?: () =>
         width: '100%', maxWidth: 320, padding: '16px 32px',
         borderRadius: 9999, border: 'none',
         cursor:     on ? 'pointer' : 'not-allowed',
-        background: on ? C.black : '#F0F0F0',
+        background: on ? C.green : '#F0F0F0',
         color:      on ? C.white : '#CCCCCC',
         fontSize: 15, fontWeight: 500,
         fontFamily: 'inherit', transition: 'opacity 0.15s',

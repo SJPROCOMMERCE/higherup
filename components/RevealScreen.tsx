@@ -50,7 +50,7 @@ export function RevealScreen({
             width: '100%', maxWidth: 320, padding: '16px 32px',
             borderRadius: 9999, border: 'none',
             cursor:     loading ? 'not-allowed' : 'pointer',
-            background: loading ? '#F0F0F0' : '#111111',
+            background: loading ? '#F0F0F0' : '#2DB87E',
             color:      loading ? '#CCCCCC'  : '#FFFFFF',
             fontSize: 15, fontWeight: 500,
             fontFamily: 'inherit', transition: 'opacity 0.15s',
