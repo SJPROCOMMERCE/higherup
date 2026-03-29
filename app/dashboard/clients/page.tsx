@@ -9,6 +9,7 @@ import { getTier } from '@/lib/tier'
 import { timeAgo, getMarketFlag } from '@/lib/utils'
 import { downloadOutput } from '@/lib/download'
 import { logActivity } from '@/lib/activity-log'
+import { OptimizationStatus } from '@/components/dashboard/OptimizationStatus'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
@@ -189,6 +190,7 @@ function ClientRow({
   profile,
   prompt,
   pendingRequests,
+  promptPendingRequests,
   isExpanded,
   onToggle,
   onDownload,
@@ -201,6 +203,7 @@ function ClientRow({
   profile: ClientProfile | null
   prompt: Prompt | null
   pendingRequests: number
+  promptPendingRequests: number
   isExpanded: boolean
   onToggle: () => void
   onDownload: (u: Upload) => void
@@ -396,6 +399,12 @@ function ClientRow({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 14, fontWeight: 500, color: T.black }}>{client.store_name}</span>
+            {/* Template status dot */}
+            <span style={{
+              display: 'inline-block', width: 6, height: 6, borderRadius: '50%',
+              background: profile?.prompt_id ? '#2DB87E' : '#DDDDDD',
+              verticalAlign: 'middle', flexShrink: 0,
+            }} />
             {client.niche && (
               <span style={{ fontSize: 11, color: T.ghost, border: `1px solid ${T.div}`, borderRadius: 100, padding: '1px 8px' }}>
                 {NICHE_LABELS[client.niche] ?? client.niche}
@@ -404,6 +413,12 @@ function ClientRow({
             {pendingRequests > 0 && (
               <span style={{ fontSize: 11, color: T.orange }}>
                 {pendingRequests} pending request{pendingRequests > 1 ? 's' : ''}
+              </span>
+            )}
+            {/* Prompt request pending badge */}
+            {promptPendingRequests > 0 && (
+              <span style={{ fontSize: 10, fontWeight: 500, color: '#F59E0B', marginLeft: 2 }}>
+                Request pending
               </span>
             )}
           </div>
@@ -477,6 +492,18 @@ function ClientRow({
 
           {/* ── Client info tab ─────────────────────────────────────── */}
           {activeTab === 'info' && (<>
+
+          {/* ── Optimization status ─────────────────────────────────── */}
+          <div style={{ marginBottom: 24 }}>
+            <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: '#CCCCCC', textTransform: 'uppercase' as const, marginBottom: 10 }}>
+              OPTIMIZATION STATUS
+            </p>
+            <OptimizationStatus
+              clientId={client.id}
+              vaId={currentVA!.id}
+              onSwitchToRequests={() => setActiveTab('requests')}
+            />
+          </div>
 
           {/* ── Rejection notice ────────────────────────────────────── */}
           {client.approval_status === 'rejected' && client.rejection_reason && (
@@ -898,7 +925,8 @@ export default function ClientsPage() {
   const [uploadsMap,     setUploadsMap]    = useState<Record<string, Upload[]>>({})
   const [profilesMap,    setProfilesMap]   = useState<Record<string, ClientProfile>>({})
   const [promptsMap,     setPromptsMap]    = useState<Record<string, Prompt>>({})
-  const [pendingReqMap,  setPendingReqMap] = useState<Record<string, number>>({})
+  const [pendingReqMap,         setPendingReqMap]         = useState<Record<string, number>>({})
+  const [promptPendingReqMap,   setPromptPendingReqMap]   = useState<Record<string, number>>({})
   const [loading,        setLoading]       = useState(true)
   const [search,         setSearch]        = useState('')
   const [filter,         setFilter]        = useState<Filter>('all')
@@ -984,6 +1012,20 @@ export default function ClientsPage() {
         reqMap[r.client_id] = (reqMap[r.client_id] ?? 0) + 1
       }
       setPendingReqMap(reqMap)
+
+      // 6. Submitted prompt_requests count per client (for list badge)
+      const { data: promptReqData } = await supabase
+        .from('prompt_requests')
+        .select('client_id')
+        .in('client_id', ids)
+        .eq('va_id', currentVA.id)
+        .eq('status', 'submitted')
+
+      const promptReqMap: Record<string, number> = {}
+      for (const r of (promptReqData ?? []) as { client_id: string }[]) {
+        promptReqMap[r.client_id] = (promptReqMap[r.client_id] ?? 0) + 1
+      }
+      setPromptPendingReqMap(promptReqMap)
     }
 
     setLoading(false)
@@ -1139,6 +1181,7 @@ export default function ClientsPage() {
                 : null
             }
             pendingRequests={pendingReqMap[client.id] ?? 0}
+            promptPendingRequests={promptPendingReqMap[client.id] ?? 0}
             isExpanded={expanded === client.id}
             onToggle={() => setExpanded(expanded === client.id ? null : client.id)}
             onDownload={handleDownload}
