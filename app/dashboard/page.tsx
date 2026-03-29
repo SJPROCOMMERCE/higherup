@@ -561,14 +561,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── Alerts ──────────────────────────────────────────── */}
-      {visibleAlerts.length > 0 && (
-        <div className="s2" style={{ ...C.outer, marginBottom: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-          {visibleAlerts.map(a => (
-            <AlertRow key={a.id} alert={a} onDismiss={handleDismiss} />
-          ))}
-        </div>
-      )}
 
       {/* ── Locked files banner ─────────────────────────────── */}
       {!loading && lockedCount > 0 && (

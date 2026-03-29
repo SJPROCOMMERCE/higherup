@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useVA } from '@/context/va-context'
 import { supabase } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-log'
+import { NotificationBell } from '@/components/NotificationBell'
 
 const NAV = [
   { label: 'Overview',   href: '/dashboard',            exact: true  },
@@ -159,6 +160,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Right */}
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16 }}>
+          {!navDisabled && <NotificationBell vaId={currentVA.id} />}
           <span style={{ fontSize: 12, color: '#999999' }}>{currentVA.name}</span>
           <button
             onClick={() => {

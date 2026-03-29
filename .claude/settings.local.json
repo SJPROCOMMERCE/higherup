@@ -89,7 +89,8 @@
       "Bash(grep -n \"How many clients\\\\|PER MONTH\\\\|PER YEAR\\\\|Per month\\\\|Per year\" /Users/safouaneelajjouri/Documents/HigherUp/app/join/[token]/OnboardingForm.tsx)",
       "Bash(grep -n \"looks like over time\" /Users/safouaneelajjouri/Documents/HigherUp/app/join/[token]/OnboardingForm.tsx)",
       "Bash(grep -n \"You''re a business\" /Users/safouaneelajjouri/Documents/HigherUp/app/join/[token]/OnboardingForm.tsx)",
-      "Bash(grep -n \"business\" /Users/safouaneelajjouri/Documents/HigherUp/app/join/[token]/OnboardingForm.tsx)"
+      "Bash(grep -n \"business\" /Users/safouaneelajjouri/Documents/HigherUp/app/join/[token]/OnboardingForm.tsx)",
+      "Bash(grep -l \"notifications\" /Users/safouaneelajjouri/Documents/HigherUp/supabase/migrations/*.sql)"
     ]
   }
 }
