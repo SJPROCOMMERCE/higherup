@@ -445,18 +445,16 @@ function CustomCheckbox({ checked, onChange }: { checked: boolean; onChange: (v:
 
 // ─── Listing preferences constants ────────────────────────────────────────────
 
-const LISTING_PLATFORMS = [
-  'Google Shopping', 'Meta / Facebook', 'TikTok Shop', 'Amazon', 'Website only', 'Other',
-]
+const ADVERTISING_PLATFORMS = ['Google', 'Meta', 'TikTok']
 
 // ─── Custom requirements message builder ──────────────────────────────────────
 
 type CustomData = {
   maxDiscount: string
   competitorPriceDiff: string
-  platforms: string[]
-  titleFormat: string
-  descriptionFormat: string
+  platform: string
+  titlePrompt: string
+  descriptionPrompt: string
   skuStructure: string
   avgStock: string
   collections: string
@@ -467,9 +465,9 @@ function buildCustomRequirementsMessage(data: CustomData): string {
   const lines: string[] = []
   if (data.maxDiscount) lines.push(`Maximum discount: ${data.maxDiscount}%`)
   if (data.competitorPriceDiff) lines.push(`Price vs competitors: ${data.competitorPriceDiff}% under`)
-  if (data.platforms.length > 0) lines.push(`Platforms: ${data.platforms.join(', ')}`)
-  if (data.titleFormat) lines.push(`Title format:\n${data.titleFormat}`)
-  if (data.descriptionFormat) lines.push(`Description format:\n${data.descriptionFormat}`)
+  if (data.platform) lines.push(`Advertising platform: ${data.platform}`)
+  if (data.titlePrompt) lines.push(`Title prompt:\n${data.titlePrompt}`)
+  if (data.descriptionPrompt) lines.push(`Description prompt:\n${data.descriptionPrompt}`)
   if (data.skuStructure) lines.push(`SKU structure: ${data.skuStructure}`)
   if (data.avgStock) lines.push(`Average stock per product: ${data.avgStock}`)
   if (data.collections) lines.push(`Collections:\n${data.collections}`)
@@ -543,9 +541,9 @@ export default function NewClientPage() {
   const [customData, setCustomData] = useState<CustomData>({
     maxDiscount: '',
     competitorPriceDiff: '',
-    platforms: [],
-    titleFormat: '',
-    descriptionFormat: '',
+    platform: '',
+    titlePrompt: '',
+    descriptionPrompt: '',
     skuStructure: '',
     avgStock: '',
     collections: '',
@@ -666,8 +664,8 @@ export default function NewClientPage() {
     setHasCustomRequirements(null)
     setRegSelectedFiles([])
     setCustomData({
-      maxDiscount: '', competitorPriceDiff: '', platforms: [], titleFormat: '',
-      descriptionFormat: '', skuStructure: '', avgStock: '', collections: '', additionalNotes: '',
+      maxDiscount: '', competitorPriceDiff: '', platform: '', titlePrompt: '',
+      descriptionPrompt: '', skuStructure: '', avgStock: '', collections: '', additionalNotes: '',
     })
 
     setSuccess(true)
@@ -974,29 +972,26 @@ export default function NewClientPage() {
               </div>
             </div>
 
-            {/* Group 2 — LISTING PLATFORM */}
+            {/* Group 2 — ADVERTISING PLATFORM */}
             <div style={{ marginTop: 32 }}>
-              <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: '#CCCCCC', textTransform: 'uppercase' as const, marginBottom: 12 }}>
-                LISTING PLATFORM
+              <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: '#CCCCCC', textTransform: 'uppercase' as const, marginBottom: 8 }}>
+                ADVERTISING PLATFORM
               </p>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
-                {LISTING_PLATFORMS.map(platform => {
-                  const selected = customData.platforms.includes(platform)
+              <p style={{ fontSize: 12, color: '#999999', marginBottom: 12 }}>Where does your client advertise?</p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {ADVERTISING_PLATFORMS.map(platform => {
+                  const selected = customData.platform === platform
                   return (
                     <button
                       key={platform}
                       type="button"
-                      onClick={() => setCustomData(prev => ({
-                        ...prev,
-                        platforms: selected
-                          ? prev.platforms.filter(p => p !== platform)
-                          : [...prev.platforms, platform],
-                      }))}
+                      onClick={() => setCustomData(prev => ({ ...prev, platform: selected ? '' : platform }))}
                       style={{
-                        fontSize: 13, padding: '7px 16px', borderRadius: 100,
+                        fontSize: 13, padding: '7px 20px', borderRadius: 100,
                         border: `1.5px solid ${selected ? '#111111' : '#EEEEEE'}`,
                         background: selected ? '#FAFAFA' : 'white',
                         color: selected ? '#111111' : '#999999',
+                        fontWeight: selected ? 500 : 400,
                         cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s',
                       }}
                     >
@@ -1007,38 +1002,43 @@ export default function NewClientPage() {
               </div>
             </div>
 
-            {/* Group 3 — LISTING FORMAT */}
+            {/* Group 3 — CLIENT PROMPTS */}
             <div style={{ marginTop: 32 }}>
-              <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: '#CCCCCC', textTransform: 'uppercase' as const, marginBottom: 12 }}>
-                LISTING FORMAT
+              <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: '#CCCCCC', textTransform: 'uppercase' as const, marginBottom: 8 }}>
+                CLIENT PROMPTS
+              </p>
+              <p style={{ fontSize: 12, color: '#999999', marginBottom: 16 }}>
+                If your client has specific instructions for how titles and descriptions should be written, paste them here.
               </p>
               <div>
-                <p style={{ fontSize: 11, color: '#CCCCCC', marginBottom: 6 }}>Title format</p>
+                <p style={{ fontSize: 11, color: '#CCCCCC', marginBottom: 6 }}>Title prompt</p>
                 <textarea
-                  value={customData.titleFormat}
-                  onChange={e => setCustomData(prev => ({ ...prev, titleFormat: e.target.value }))}
-                  placeholder="e.g. [Brand] [Product Name] [Key Feature] - [Material] [Size]"
+                  value={customData.titlePrompt}
+                  onChange={e => setCustomData(prev => ({ ...prev, titlePrompt: e.target.value }))}
+                  placeholder="e.g. Always start with the brand name, then product type, then key feature. Max 150 characters. No emoji."
+                  maxLength={2000}
                   style={{
                     width: '100%', fontSize: 13, color: '#111111', background: 'white',
                     border: '1px solid #EEEEEE', borderRadius: 8, padding: '10px 12px',
                     outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
-                    resize: 'vertical', minHeight: 80, lineHeight: 1.6, transition: 'border-color 0.15s',
+                    resize: 'vertical', minHeight: 100, lineHeight: 1.6, transition: 'border-color 0.15s',
                   }}
                   onFocus={e => { e.currentTarget.style.borderColor = '#111111' }}
                   onBlur={e => { e.currentTarget.style.borderColor = '#EEEEEE' }}
                 />
               </div>
               <div style={{ marginTop: 16 }}>
-                <p style={{ fontSize: 11, color: '#CCCCCC', marginBottom: 6 }}>Description format</p>
+                <p style={{ fontSize: 11, color: '#CCCCCC', marginBottom: 6 }}>Description prompt</p>
                 <textarea
-                  value={customData.descriptionFormat}
-                  onChange={e => setCustomData(prev => ({ ...prev, descriptionFormat: e.target.value }))}
-                  placeholder="e.g. Start with a hook sentence. List 3-5 bullet points with key features. End with a CTA."
+                  value={customData.descriptionPrompt}
+                  onChange={e => setCustomData(prev => ({ ...prev, descriptionPrompt: e.target.value }))}
+                  placeholder="e.g. Start with a one-line hook, then 4 bullet points with features, then a closing line. Always mention material and sizing."
+                  maxLength={2000}
                   style={{
                     width: '100%', fontSize: 13, color: '#111111', background: 'white',
                     border: '1px solid #EEEEEE', borderRadius: 8, padding: '10px 12px',
                     outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
-                    resize: 'vertical', minHeight: 80, lineHeight: 1.6, transition: 'border-color 0.15s',
+                    resize: 'vertical', minHeight: 100, lineHeight: 1.6, transition: 'border-color 0.15s',
                   }}
                   onFocus={e => { e.currentTarget.style.borderColor = '#111111' }}
                   onBlur={e => { e.currentTarget.style.borderColor = '#EEEEEE' }}
