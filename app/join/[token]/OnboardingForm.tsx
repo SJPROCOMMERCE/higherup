@@ -740,49 +740,88 @@ export function OnboardingForm({ token: _token, inviteId }: { token: string; inv
 
           {/* ── Step 7: Comparison ─────────────────────────────────────── */}
           {step === 7 && (
-            <RevealScreen onContinue={goForward} continueDelay={5000}>
-              <div style={{
-                display: 'flex', gap: mobile ? 0 : 32,
-                flexDirection: mobile ? 'column' : 'row',
-                textAlign: 'left',
-              }}>
-                {/* NOW */}
-                <div style={{ flex: 1, marginBottom: mobile ? 36 : 0 }}>
-                  <RevealText delay={0} style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.ghost, marginBottom: 20 }}>
+            <RevealScreen onContinue={goForward} continueDelay={6000}>
+              <div style={{ maxWidth: 400, margin: '0 auto', textAlign: 'left' }}>
+
+                {/* Column headers */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 40 }}>
+                  <RevealText delay={0} style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.ghost }}>
                     Now
                   </RevealText>
-                  {[
-                    { t: 200,  text: '9-to-5 schedule'        },
-                    { t: 500,  text: `$${avgSalary}/month`     },
-                    { t: 800,  text: 'Commute every day'       },
-                    { t: 1100, text: '1 income source'         },
-                    { t: 1400, text: 'No financial freedom'    },
-                  ].map(({ t, text }) => (
-                    <RevealText key={text} delay={t}
-                      style={{ fontSize: 15, color: C.ghost, marginBottom: 12 }}>
-                      {text}
-                    </RevealText>
-                  ))}
-                </div>
-
-                {/* WITH HIGHERUP */}
-                <div style={{ flex: 1 }}>
-                  <RevealText delay={600} style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.black, marginBottom: 20 }}>
+                  <RevealText delay={2000} style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.black }}>
                     With HigherUp
                   </RevealText>
-                  {[
-                    { t: 800,  text: 'Work your own hours', g: false },
-                    { t: 1100, text: '$800+/month',          g: true  },
-                    { t: 1400, text: 'Work from anywhere',   g: false },
-                    { t: 1700, text: 'Referral income too',  g: false },
-                    { t: 2000, text: 'Full freedom',         g: false },
-                  ].map(({ t, text, g }) => (
-                    <RevealText key={text} delay={t}
-                      style={{ fontSize: 15, color: g ? C.green : C.black, fontWeight: g ? 600 : 400, marginBottom: 12 }}>
-                      {text}
-                    </RevealText>
-                  ))}
                 </div>
+
+                {/* Row 1: Income */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <RevealText delay={300}>
+                    <div>
+                      <div style={{ fontSize: bigN(40), fontWeight: 600, color: C.ghost, lineHeight: 1 }}>$130</div>
+                      <div style={{ fontSize: 12, color: C.ghost, marginTop: 4 }}>/month</div>
+                    </div>
+                  </RevealText>
+                  <RevealText delay={2300}>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: bigN(40), fontWeight: 600, color: C.green, lineHeight: 1 }}>
+                        <CountUp end={800} prefix="$" delay={2300} duration={1200} />
+                      </div>
+                      <div style={{ fontSize: 12, color: C.gray, marginTop: 4 }}>/month</div>
+                    </div>
+                  </RevealText>
+                </div>
+
+                {/* Divider */}
+                <RevealText delay={600}>
+                  <div style={{ borderTop: '1px solid #F5F5F5', margin: '24px 0' }} />
+                </RevealText>
+
+                {/* Row 2: Time */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <RevealText delay={600}>
+                    <div>
+                      <div style={{ fontSize: bigN(40), fontWeight: 600, color: C.ghost, lineHeight: 1 }}>43h</div>
+                      <div style={{ fontSize: 12, color: C.ghost, marginTop: 4 }}>/month</div>
+                    </div>
+                  </RevealText>
+                  <RevealText delay={2600}>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: bigN(40), fontWeight: 600, color: C.black, lineHeight: 1 }}>
+                        <CountUp end={3} delay={2600} duration={800} suffix="h" />
+                      </div>
+                      <div style={{ fontSize: 12, color: C.gray, marginTop: 4 }}>/month</div>
+                    </div>
+                  </RevealText>
+                </div>
+
+                {/* Divider */}
+                <RevealText delay={900}>
+                  <div style={{ borderTop: '1px solid #F5F5F5', margin: '24px 0' }} />
+                </RevealText>
+
+                {/* Row 3: Hourly rate */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <RevealText delay={900}>
+                    <div>
+                      <div style={{ fontSize: bigN(40), fontWeight: 600, color: C.ghost, lineHeight: 1 }}>${Math.round(avgSalary / 160)}</div>
+                      <div style={{ fontSize: 12, color: C.ghost, marginTop: 4 }}>/hour</div>
+                    </div>
+                  </RevealText>
+                  <RevealText delay={2900}>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: bigN(40), fontWeight: 600, color: C.green, lineHeight: 1 }}>
+                        <CountUp end={13} prefix="$" delay={2900} duration={1000} />
+                      </div>
+                      <div style={{ fontSize: 12, color: C.gray, marginTop: 4 }}>/hour</div>
+                    </div>
+                  </RevealText>
+                </div>
+
+                {/* Closer */}
+                <RevealText delay={4500} style={{ marginTop: 48, fontSize: 16, fontWeight: 500, color: C.black }}>
+                  Same skills. 6× the income.
+                </RevealText>
+
               </div>
             </RevealScreen>
           )}

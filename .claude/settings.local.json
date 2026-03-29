@@ -82,7 +82,8 @@
       "Bash(head -20 /Users/safouaneelajjouri/Documents/HigherUp/app/join/[token]/OnboardingForm.tsx)",
       "Bash(grep -n \"minute\\\\|upload\\\\|product\\\\|listing\\\\|step\\\\|2 min\" /Users/safouaneelajjouri/Documents/HigherUp/app/join/[token]/OnboardingForm.tsx)",
       "Bash(grep -n \"200 product\\\\|200 listing\" /Users/safouaneelajjouri/Documents/HigherUp/app/join/[token]/OnboardingForm.tsx)",
-      "Bash(grep -n \"3 hours\\\\|Working\" /Users/safouaneelajjouri/Documents/HigherUp/app/join/[token]/OnboardingForm.tsx)"
+      "Bash(grep -n \"3 hours\\\\|Working\" /Users/safouaneelajjouri/Documents/HigherUp/app/join/[token]/OnboardingForm.tsx)",
+      "Bash(grep -n \"avgSalary\\\\|avgHours\\\\|countryData\\\\|getCountry\" /Users/safouaneelajjouri/Documents/HigherUp/app/join/[token]/OnboardingForm.tsx)"
     ]
   }
 }
