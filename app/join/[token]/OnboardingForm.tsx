@@ -787,7 +787,7 @@ export function OnboardingForm({ token: _token, inviteId }: { token: string; inv
                   <RevealText delay={2600}>
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: bigN(40), fontWeight: 600, color: C.black, lineHeight: 1 }}>
-                        <CountUp end={3} delay={2600} duration={800} suffix="h" />
+                        <CountUp end={10} delay={2600} duration={800} suffix="h" />
                       </div>
                       <div style={{ fontSize: 12, color: C.gray, marginTop: 4 }}>/month</div>
                     </div>
@@ -810,7 +810,7 @@ export function OnboardingForm({ token: _token, inviteId }: { token: string; inv
                   <RevealText delay={2900}>
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: bigN(40), fontWeight: 600, color: C.green, lineHeight: 1 }}>
-                        <CountUp end={13} prefix="$" delay={2900} duration={1000} />
+                        <CountUp end={80} prefix="$" delay={2900} duration={1000} />
                       </div>
                       <div style={{ fontSize: 12, color: C.gray, marginTop: 4 }}>/hour</div>
                     </div>
