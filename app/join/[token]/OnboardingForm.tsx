@@ -301,7 +301,7 @@ function StepIdentityShift({
         You&apos;re not just a VA.
       </RevealText>
       <RevealText delay={5000} style={{ fontSize: bigN(28), fontWeight: 600, color: C.black, lineHeight: 1.3, letterSpacing: '-0.02em', marginBottom: 48 }}>
-        You&apos;re a business.
+        You&apos;re a business owner.
       </RevealText>
       <RevealText delay={6500} style={{ fontSize: 18, fontWeight: 400, color: C.black }}>
         Ready, <span style={{ fontWeight: 600 }}>{firstName}</span>?
