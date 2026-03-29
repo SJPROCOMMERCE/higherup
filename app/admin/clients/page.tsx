@@ -257,6 +257,10 @@ function ClientDetail({
   const [editProfileMode, setEditProfileMode] = useState(false)
   const [editPromptId, setEditPromptId] = useState('')
   const [savingProfile, setSavingProfile] = useState(false)
+  const [clientTemplates, setClientTemplates] = useState<{ id: string; name: string; niche: string | null; language: string | null }[]>([])
+  const [addTemplateOpen, setAddTemplateOpen] = useState(false)
+  const [addTemplateId, setAddTemplateId] = useState('')
+  const [addingTemplate, setAddingTemplate] = useState(false)
 
   // Prompt requests
   const [promptRequests, setPromptRequests] = useState<PromptRequest[]>([])
@@ -319,6 +323,7 @@ function ClientDetail({
     }
     void load()
     void loadPromptRequests()
+    void loadClientTemplates()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client.id])
 
@@ -329,6 +334,17 @@ function ClientDetail({
       .eq('client_id', client.id)
       .order('created_at', { ascending: false })
     setPromptRequests((data || []) as unknown as PromptRequest[])
+  }
+
+  async function loadClientTemplates() {
+    const { data } = await supabase
+      .from('client_prompts')
+      .select('prompt_id, prompts(id, name, niche, language)')
+      .eq('client_id', client.id)
+      .order('assigned_at')
+    setClientTemplates(
+      (data ?? []).map(r => (r.prompts as unknown as { id: string; name: string; niche: string | null; language: string | null })).filter(Boolean)
+    )
   }
 
   async function getSignedUrl(pathOrUrl: string): Promise<string> {
@@ -562,6 +578,30 @@ function ClientDetail({
     onRefresh()
   }
 
+  async function addTemplateToClient() {
+    if (!addTemplateId) return
+    setAddingTemplate(true)
+    const { error } = await supabase.from('client_prompts').insert({
+      client_id: client.id, prompt_id: addTemplateId, assigned_by: 'admin',
+    })
+    if (error?.code === '23505') {
+      alert('This template is already assigned to this client.')
+    } else if (error) {
+      alert('Failed: ' + error.message)
+    }
+    setAddTemplateOpen(false)
+    setAddTemplateId('')
+    setAddingTemplate(false)
+    void loadClientTemplates()
+  }
+
+  async function removeTemplateFromClient(promptId: string, name: string) {
+    if (!confirm(`Remove template "${name}" from this client?`)) return
+    await supabase.from('client_prompts').delete()
+      .eq('client_id', client.id).eq('prompt_id', promptId)
+    void loadClientTemplates()
+  }
+
   async function handleDelete() {
     setDeleting(true)
     await supabase.from('clients').delete().eq('id', client.id)
@@ -670,62 +710,59 @@ function ClientDetail({
                 {editProfileMode ? 'Cancel' : 'Edit profile'}
               </button>
             </div>
-            {detail?.profile ? (
-              <div>
-                <div style={label9}>PROMPT TEMPLATE</div>
-                {editProfileMode ? (
-                  <div style={{ marginBottom: 12 }}>
-                    <PromptDropdown
-                      prompts={allPrompts}
-                      clientNiche={client.niche ?? null}
-                      clientLanguage={client.language ?? null}
-                      value={editPromptId}
-                      onChange={setEditPromptId}
-                    />
-                    <button
-                      onClick={() => void handleSaveProfile()}
-                      disabled={savingProfile || !editPromptId}
-                      style={{ marginTop: 8, padding: '6px 14px', background: T.black, color: T.bg, border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}
-                    >
-                      {savingProfile ? 'Saving…' : 'Save'}
-                    </button>
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 14, color: T.black, marginBottom: 4 }}>
-                    <a href={`/admin/prompts`} style={{ color: T.black, textDecoration: 'underline' }}>
-                      {detail.profile.prompts?.name ?? 'Unknown'}
-                    </a>
-                  </div>
-                )}
-                {detail.profile.prompts && (
-                  <div style={{ fontSize: 11, color: T.ghost }}>
-                    {detail.profile.prompts.niche ?? '—'} · {detail.profile.prompts.language ?? '—'}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div>
-                <div style={{ fontSize: 14, color: '#DDDDDD', marginBottom: 12 }}>Not assigned</div>
-                {editProfileMode && (
-                  <div>
-                    <PromptDropdown
-                      prompts={allPrompts}
-                      clientNiche={client.niche ?? null}
-                      clientLanguage={client.language ?? null}
-                      value={editPromptId}
-                      onChange={setEditPromptId}
-                    />
-                    <button
-                      onClick={() => void handleSaveProfile()}
-                      disabled={savingProfile || !editPromptId}
-                      style={{ marginTop: 8, padding: '6px 14px', background: T.black, color: T.bg, border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}
-                    >
-                      {savingProfile ? 'Saving…' : 'Assign template'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+            <div>
+              <div style={label9}>TEMPLATES</div>
+              {clientTemplates.length === 0 && (
+                <div style={{ fontSize: 13, color: '#DDDDDD', marginBottom: 8 }}>No templates assigned</div>
+              )}
+              {clientTemplates.map(t => (
+                <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: `1px solid ${T.div}` }}>
+                  <span style={{ flex: 1, fontSize: 13, color: T.black }}>
+                    <a href="/admin/prompts" style={{ color: T.black, textDecoration: 'underline' }}>{t.name}</a>
+                  </span>
+                  <span style={{ fontSize: 11, color: T.ghost }}>{t.niche ?? '—'} · {t.language ?? '—'}</span>
+                  <button
+                    onClick={() => void removeTemplateFromClient(t.id, t.name)}
+                    style={{ fontSize: 12, color: T.ghost, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit', transition: 'color 0.15s' }}
+                    onMouseEnter={e => e.currentTarget.style.color = '#EF4444'}
+                    onMouseLeave={e => e.currentTarget.style.color = T.ghost}
+                  >×</button>
+                </div>
+              ))}
+              {/* Add template */}
+              {!addTemplateOpen ? (
+                <button
+                  onClick={() => { setAddTemplateOpen(true); setAddTemplateId('') }}
+                  style={{ marginTop: 8, fontSize: 12, color: T.ghost, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit', transition: 'color 0.15s' }}
+                  onMouseEnter={e => e.currentTarget.style.color = T.black}
+                  onMouseLeave={e => e.currentTarget.style.color = T.ghost}
+                >+ Add template</button>
+              ) : (
+                <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <select
+                    value={addTemplateId}
+                    onChange={e => setAddTemplateId(e.target.value)}
+                    style={{ fontSize: 12, border: `1px solid ${T.div}`, borderRadius: 6, padding: '5px 8px', fontFamily: 'inherit', color: T.black, background: T.bg, flex: 1, minWidth: 0 }}
+                  >
+                    <option value="">— Select template —</option>
+                    {allPrompts.filter(p => !clientTemplates.some(ct => ct.id === p.id)).map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => void addTemplateToClient()}
+                    disabled={!addTemplateId || addingTemplate}
+                    style={{ fontSize: 12, background: T.black, color: T.bg, border: 'none', borderRadius: 6, padding: '5px 12px', cursor: addTemplateId ? 'pointer' : 'not-allowed', opacity: addTemplateId ? 1 : 0.4, fontFamily: 'inherit' }}
+                  >
+                    {addingTemplate ? '…' : 'Add'}
+                  </button>
+                  <button
+                    onClick={() => { setAddTemplateOpen(false); setAddTemplateId('') }}
+                    style={{ fontSize: 12, color: T.ghost, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}
+                  >Cancel</button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Section C: Stats */}

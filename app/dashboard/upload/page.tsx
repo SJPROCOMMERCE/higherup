@@ -10,7 +10,7 @@ import { getTiers, getTierSync, DEFAULT_TIERS, type Tier } from '@/lib/pricing'
 import { getMonthStart } from '@/lib/utils'
 import dynamic from 'next/dynamic'
 import { downloadOutput } from '@/lib/download'
-import { TemplateSelector, type TemplateInfo } from '@/components/dashboard/TemplateSelector'
+import { TemplateSelector, type TemplateInfo, type TemplateSelectorData } from '@/components/dashboard/TemplateSelector'
 
 // ManualEntry is only shown when the user explicitly clicks "enter manually"
 // — load it lazily so it never bloats the initial page compile
@@ -494,12 +494,7 @@ function UploadForm() {
 
   // Template selector
   const [selectedTemplateId, setSelectedTemplateId] = useState('')
-  const [templateData, setTemplateData] = useState<{
-    assignedTemplate:  TemplateInfo | null
-    assignedPromptId:  string | null
-    customTemplates:   TemplateInfo[]
-    higherUpTemplates: TemplateInfo[]
-  } | null>(null)
+  const [templateData, setTemplateData] = useState<TemplateSelectorData | null>(null)
 
   // Live status
   const [activeUploadId, setActiveUploadId] = useState<string | null>(null)
@@ -516,26 +511,17 @@ function UploadForm() {
     if (!clientId) { setTemplateData(null); setSelectedTemplateId(''); return }
 
     async function loadTemplates() {
-      // 1. Assigned template from client_profiles
-      const { data: profile } = await supabase
-        .from('client_profiles')
-        .select('prompt_id')
+      // 1. Assigned templates from client_prompts (many-to-many)
+      const { data: cpRows } = await supabase
+        .from('client_prompts')
+        .select('prompt_id, prompts(id, name, niche, language, is_default)')
         .eq('client_id', clientId)
-        .maybeSingle()
-      const assignedPromptId = profile?.prompt_id ?? null
+      const assignedTemplates: TemplateInfo[] = (cpRows ?? [])
+        .map(r => r.prompts as unknown as TemplateInfo)
+        .filter(Boolean)
+      const assignedIds = new Set(assignedTemplates.map(t => t.id))
 
-      let assignedTemplate: TemplateInfo | null = null
-      if (assignedPromptId) {
-        const { data } = await supabase
-          .from('prompts')
-          .select('id, name, niche, language, is_default')
-          .eq('id', assignedPromptId)
-          .eq('is_active', true)
-          .maybeSingle()
-        assignedTemplate = data as TemplateInfo | null
-      }
-
-      // 2. Client niche + language for matching
+      // 2. Client info for matching
       const { data: client } = await supabase
         .from('clients')
         .select('niche, language')
@@ -558,39 +544,38 @@ function UploadForm() {
           .select('id, name, niche, language, is_default')
           .in('id', customIds)
           .eq('is_active', true)
-        customTemplates = (data ?? []) as TemplateInfo[]
+        customTemplates = ((data ?? []) as TemplateInfo[]).filter(t => !assignedIds.has(t.id))
       }
+      const customIdSet = new Set(customTemplates.map(t => t.id))
 
-      // 4. HigherUp templates — relevant by niche / language / default
+      // 4. General HigherUp templates (relevant, not already in above)
       const { data: all } = await supabase
         .from('prompts')
         .select('id, name, niche, language, is_default')
         .eq('is_active', true)
         .order('is_default', { ascending: false })
         .order('name')
-
-      const exclude = new Set([...(assignedPromptId ? [assignedPromptId] : []), ...customIds])
-      const higherUpTemplates = (all ?? []).filter((t: TemplateInfo) => {
-        if (exclude.has(t.id)) return false
+      const generalTemplates = ((all ?? []) as TemplateInfo[]).filter(t => {
+        if (assignedIds.has(t.id) || customIdSet.has(t.id)) return false
         return (
-          t.niche     === client?.niche     ||
-          t.language  === client?.language  ||
-          t.niche     === 'General'         ||
+          t.niche    === client?.niche    ||
+          t.language === client?.language ||
+          t.niche    === 'General'        ||
           t.is_default
         )
-      }) as TemplateInfo[]
+      })
 
-      const data = { assignedTemplate, assignedPromptId, customTemplates, higherUpTemplates }
+      const data: TemplateSelectorData = { assignedTemplates, customTemplates, generalTemplates }
       setTemplateData(data)
 
-      // Pre-select: assigned → first default → first available
-      if (assignedPromptId) {
-        setSelectedTemplateId(assignedPromptId)
-      } else if (higherUpTemplates.length > 0) {
-        const def = higherUpTemplates.find(t => t.is_default) ?? higherUpTemplates[0]
-        setSelectedTemplateId(def.id)
+      // Pre-select: first assigned > first custom > first general
+      if (assignedTemplates.length > 0) {
+        setSelectedTemplateId(assignedTemplates[0].id)
       } else if (customTemplates.length > 0) {
         setSelectedTemplateId(customTemplates[0].id)
+      } else if (generalTemplates.length > 0) {
+        const def = generalTemplates.find(t => t.is_default) ?? generalTemplates[0]
+        setSelectedTemplateId(def.id)
       } else {
         setSelectedTemplateId('')
       }
@@ -1673,10 +1658,7 @@ function UploadForm() {
       {/* ── Template selector ─────────────────────────────────────────────── */}
       {parseResult && !parsing && mappingConfirmed && templateData && (
         <TemplateSelector
-          assignedTemplate={templateData.assignedTemplate}
-          assignedPromptId={templateData.assignedPromptId}
-          customTemplates={templateData.customTemplates}
-          higherUpTemplates={templateData.higherUpTemplates}
+          data={templateData}
           selectedTemplateId={selectedTemplateId}
           onChange={setSelectedTemplateId}
         />

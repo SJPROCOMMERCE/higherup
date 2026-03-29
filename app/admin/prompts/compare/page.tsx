@@ -71,8 +71,8 @@ function ComparePromptsContent() {
       const [resA, resB, resClientsA, resClientsB] = await Promise.all([
         supabase.from('prompts').select('*').eq('id', aId).single(),
         supabase.from('prompts').select('*').eq('id', bId).single(),
-        supabase.from('client_profiles').select('id', { count: 'exact', head: true }).eq('prompt_id', aId),
-        supabase.from('client_profiles').select('id', { count: 'exact', head: true }).eq('prompt_id', bId),
+        supabase.from('client_prompts').select('id', { count: 'exact', head: true }).eq('prompt_id', aId),
+        supabase.from('client_prompts').select('id', { count: 'exact', head: true }).eq('prompt_id', bId),
       ])
 
       if (resA.data) setPromptA(resA.data as Prompt)
@@ -94,7 +94,7 @@ function ComparePromptsContent() {
     if (!confirmed) return
     setTransferring(true)
     await supabase
-      .from('client_profiles')
+      .from('client_prompts')
       .update({ prompt_id: promptA.id })
       .eq('prompt_id', promptB.id)
     setClientsA(clientsA + clientsB)
@@ -111,7 +111,7 @@ function ComparePromptsContent() {
     if (!confirmed) return
     setTransferring(true)
     await supabase
-      .from('client_profiles')
+      .from('client_prompts')
       .update({ prompt_id: promptB.id })
       .eq('prompt_id', promptA.id)
     setClientsB(clientsA + clientsB)

@@ -41,19 +41,19 @@ export async function buildPrompt(
 ): Promise<{ system: string; title: string; description: string }> {
 
   // ── 1. Load client + profile ───────────────────────────────────────────────
-  const { data: clientRaw } = await supabase
-    .from('clients')
-    .select('*, client_profiles(*)')
-    .eq('id', clientId)
-    .single()
+  const [{ data: clientRaw }, { data: clientPromptRows }] = await Promise.all([
+    supabase.from('clients').select('*, client_profiles(*)').eq('id', clientId).single(),
+    supabase.from('client_prompts').select('prompt_id').eq('client_id', clientId).order('assigned_at').limit(1),
+  ])
 
   const client = clientRaw as Record<string, unknown> | null
 
-  // ── 2. Resolve prompt ID — override takes priority over profile ───────────
+  // ── 2. Resolve prompt ID — override > client_prompts > legacy client_profiles ──
   const profileRaw = client?.client_profiles
   const profile = Array.isArray(profileRaw) ? profileRaw[0] : profileRaw
-  const profilePromptId = (profile as Record<string, unknown> | null)?.prompt_id as string | null | undefined
-  const promptId = overridePromptId ?? profilePromptId
+  const legacyProfilePromptId = (profile as Record<string, unknown> | null)?.prompt_id as string | null | undefined
+  const assignedPromptId = (clientPromptRows ?? [])[0]?.prompt_id ?? legacyProfilePromptId
+  const promptId = overridePromptId ?? assignedPromptId
 
   // ── 3. Load linked prompt template ────────────────────────────────────────
   let prompt: PromptRow | null = null

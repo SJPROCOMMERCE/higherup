@@ -606,7 +606,7 @@ function LinkedClientsPanel({ promptId, promptName }: { promptId: string; prompt
   const loadLinked = useCallback(async () => {
     setLinkedLoading(true)
     const { data } = await supabase
-      .from('client_profiles')
+      .from('client_prompts')
       .select('client_id, clients(store_name, niche, market, va_id, vas(name))')
       .eq('prompt_id', promptId)
 
@@ -635,7 +635,7 @@ function LinkedClientsPanel({ promptId, promptName }: { promptId: string; prompt
 
   async function handleUnlink(clientId: string) {
     await supabase
-      .from('client_profiles')
+      .from('client_prompts')
       .delete()
       .eq('client_id', clientId)
       .eq('prompt_id', promptId)
@@ -644,13 +644,13 @@ function LinkedClientsPanel({ promptId, promptName }: { promptId: string; prompt
 
   async function loadAllClients() {
     setLinkLoading(true)
-    const { data: profileData } = await supabase
-      .from('client_profiles')
-      .select('client_id, prompt_id, prompts(name)')
+    const { data: cpData } = await supabase
+      .from('client_prompts')
+      .select('client_id, prompts(name)')
 
     const profileMap: Record<string, string | null> = {}
-    if (profileData) {
-      for (const row of profileData as Record<string, unknown>[]) {
+    if (cpData) {
+      for (const row of cpData as Record<string, unknown>[]) {
         const pRow = row.prompts as Record<string, unknown> | null
         profileMap[row.client_id as string] = (pRow?.name as string | null) ?? null
       }
@@ -681,8 +681,8 @@ function LinkedClientsPanel({ promptId, promptName }: { promptId: string; prompt
 
   async function confirmLink(client: AllClientForLink) {
     await supabase
-      .from('client_profiles')
-      .upsert({ client_id: client.id, prompt_id: promptId, updated_by: 'admin', updated_at: new Date().toISOString() }, { onConflict: 'client_id' })
+      .from('client_prompts')
+      .insert({ client_id: client.id, prompt_id: promptId, assigned_by: 'admin' })
     setLinkConfirmClient(null)
     setShowLinkDropdown(false)
     await loadLinked()
@@ -1614,7 +1614,7 @@ export default function AdminPromptsPage() {
     ] = await Promise.all([
       supabase.from('prompts').select('*').order('niche').order('language').order('name'),
       supabase.from('clients').select('niche, language, approval_status, is_active'),
-      supabase.from('client_profiles').select('prompt_id').not('prompt_id', 'is', null),
+      supabase.from('client_prompts').select('prompt_id'),
     ])
     setPrompts((promptsData ?? []) as Prompt[])
 
@@ -1628,7 +1628,7 @@ export default function AdminPromptsPage() {
     }
     setClientsByNicheLang(nlMap)
 
-    // Build prompt_id → count of profiles using that template
+    // Build prompt_id → count of client_prompts using that template
     const pidMap: Record<string, number> = {}
     for (const p of (profilesData ?? []) as { prompt_id: string | null }[]) {
       if (p.prompt_id) {
@@ -1787,7 +1787,7 @@ export default function AdminPromptsPage() {
     if (prompt.is_active) {
       // Deactivating — check linked clients
       const { data: linked } = await supabase
-        .from('client_profiles')
+        .from('client_prompts')
         .select('client_id')
         .eq('prompt_id', prompt.id)
       const count = linked?.length ?? 0
@@ -1826,7 +1826,7 @@ export default function AdminPromptsPage() {
 
   async function bulkDelete() {
     const { count } = await supabase
-      .from('client_profiles')
+      .from('client_prompts')
       .select('id', { count: 'exact', head: true })
       .in('prompt_id', [...selectedIds])
     if ((count ?? 0) > 0) {
