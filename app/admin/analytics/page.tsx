@@ -15,14 +15,14 @@ type DateRange = { from: string | null; to: string | null }
 type SortDir = 'asc' | 'desc'
 
 type CoreMetrics = {
-  variantsProcessed: number; uniqueProducts: number; uploads: number
+  products: number; uploads: number
   activeVAs: number; activeClients: number
   revenueInvoiced: number; revenueCollected: number; apiCosts: number
   affiliatePayouts: number; netMargin: number
 }
 
 type DailyRow = {
-  key: string; label: string; variants: number; products: number
+  key: string; label: string; variants: number
   uploads: number; vas: number; revenue: number; apiCost: number; margin: number
 }
 
@@ -36,7 +36,7 @@ type ClientBreak = { id: string; store_name: string; variants: number; uploads: 
 
 type ClientPerfRow = {
   id: string; store_name: string; va_name: string; niche: string | null; market: string | null
-  variants: number; products: number; uploads: number; tier: string; revenue: number; apiCost: number
+  variants: number; uploads: number; tier: string; revenue: number; apiCost: number
 }
 
 type NicheRow  = { niche: string; clients: number; variants: number; revenue: number; pct: number }
@@ -345,9 +345,8 @@ export default function AnalyticsPage() {
     const apiCosts         = doneUploads.reduce((s, u) => s + (u.api_cost_usd ?? 0), 0)
     const affiliatePayouts = affPay.reduce((s, a) => s + (a.payout_amount ?? 0), 0)
     setCore({
-      variantsProcessed: doneUploads.reduce((s, u) => s + (u.product_row_count ?? 0), 0),
-      uniqueProducts:    doneUploads.reduce((s, u) => s + (u.unique_product_count ?? 0), 0),
-      uploads:           doneUploads.length,
+      products: doneUploads.reduce((s, u) => s + (u.unique_product_count ?? 0), 0),
+      uploads:  doneUploads.length,
       activeVAs:         new Set(doneUploads.map(u => u.va_id)).size,
       activeClients:     new Set(doneUploads.map(u => u.client_id).filter(Boolean)).size,
       revenueInvoiced, revenueCollected, apiCosts, affiliatePayouts,
@@ -358,14 +357,13 @@ export default function AnalyticsPage() {
     const useWk = shouldGroupByWeek(range)
     setDailyUseWk(useWk)
     const keys = allKeysInRange(range, useWk)
-    const dailyAgg: Record<string, { variants: number; products: number; uploads: number; vas: Set<string>; apiCost: number }> = {}
-    for (const k of keys) dailyAgg[k] = { variants: 0, products: 0, uploads: 0, vas: new Set(), apiCost: 0 }
+    const dailyAgg: Record<string, { variants: number; uploads: number; vas: Set<string>; apiCost: number }> = {}
+    for (const k of keys) dailyAgg[k] = { variants: 0, uploads: 0, vas: new Set(), apiCost: 0 }
     for (const u of doneUploads) {
       if (!u.processing_completed_at) continue
       const k = dayKey(u.processing_completed_at, useWk)
-      if (!dailyAgg[k]) dailyAgg[k] = { variants: 0, products: 0, uploads: 0, vas: new Set(), apiCost: 0 }
-      dailyAgg[k].variants += u.product_row_count ?? 0
-      dailyAgg[k].products += u.unique_product_count ?? 0
+      if (!dailyAgg[k]) dailyAgg[k] = { variants: 0, uploads: 0, vas: new Set(), apiCost: 0 }
+      dailyAgg[k].variants += u.unique_product_count ?? 0
       dailyAgg[k].uploads  += 1
       dailyAgg[k].vas.add(u.va_id)
       dailyAgg[k].apiCost  += u.api_cost_usd ?? 0
@@ -376,19 +374,18 @@ export default function AnalyticsPage() {
       revByDay[k] = (revByDay[k] ?? 0) + (b.total_amount ?? 0)
     }
     const dailyRows: DailyRow[] = keys.map(k => {
-      const d = dailyAgg[k] ?? { variants: 0, products: 0, uploads: 0, vas: new Set(), apiCost: 0 }
+      const d = dailyAgg[k] ?? { variants: 0, uploads: 0, vas: new Set(), apiCost: 0 }
       const rev = revByDay[k] ?? 0
-      return { key: k, label: keyLabel(k, useWk), variants: d.variants, products: d.products, uploads: d.uploads, vas: d.vas.size, revenue: rev, apiCost: d.apiCost, margin: rev - d.apiCost }
+      return { key: k, label: keyLabel(k, useWk), variants: d.variants, uploads: d.uploads, vas: d.vas.size, revenue: rev, apiCost: d.apiCost, margin: rev - d.apiCost }
     })
     setDaily(dailyRows)
 
     // ── VA performance ────────────────────────────────────────────────────────
-    const vaUpAgg: Record<string, { variants: number; products: number; uploads: number; failed: number; clients: Set<string>; apiCost: number; times: number[] }> = {}
+    const vaUpAgg: Record<string, { variants: number; uploads: number; failed: number; clients: Set<string>; apiCost: number; times: number[] }> = {}
     for (const u of [...doneUploads, ...failedUploads]) {
-      if (!vaUpAgg[u.va_id]) vaUpAgg[u.va_id] = { variants: 0, products: 0, uploads: 0, failed: 0, clients: new Set(), apiCost: 0, times: [] }
+      if (!vaUpAgg[u.va_id]) vaUpAgg[u.va_id] = { variants: 0, uploads: 0, failed: 0, clients: new Set(), apiCost: 0, times: [] }
       if (u.status === 'done') {
-        vaUpAgg[u.va_id].variants += u.product_row_count ?? 0
-        vaUpAgg[u.va_id].products += u.unique_product_count ?? 0
+        vaUpAgg[u.va_id].variants += u.unique_product_count ?? 0
         vaUpAgg[u.va_id].uploads  += 1
         vaUpAgg[u.va_id].apiCost  += u.api_cost_usd ?? 0
         if (u.client_id) vaUpAgg[u.va_id].clients.add(u.client_id)
@@ -427,7 +424,7 @@ export default function AnalyticsPage() {
         const c = clientMap[u.client_id]
         vaClBreak[u.va_id][u.client_id] = { id: u.client_id, store_name: c?.store_name ?? u.client_id.slice(0,8), variants: 0, uploads: 0, tier: 'T1' }
       }
-      vaClBreak[u.va_id][u.client_id].variants += u.product_row_count ?? 0
+      vaClBreak[u.va_id][u.client_id].variants += u.unique_product_count ?? 0
       vaClBreak[u.va_id][u.client_id].uploads  += 1
     }
     const vaBreakMap: Record<string, ClientBreak[]> = {}
@@ -437,12 +434,11 @@ export default function AnalyticsPage() {
     setVABreaks(vaBreakMap)
 
     // ── Client performance ────────────────────────────────────────────────────
-    const clAgg: Record<string, { variants: number; products: number; uploads: number; apiCost: number }> = {}
+    const clAgg: Record<string, { variants: number; uploads: number; apiCost: number }> = {}
     for (const u of doneUploads) {
       if (!u.client_id) continue
-      if (!clAgg[u.client_id]) clAgg[u.client_id] = { variants: 0, products: 0, uploads: 0, apiCost: 0 }
-      clAgg[u.client_id].variants += u.product_row_count ?? 0
-      clAgg[u.client_id].products += u.unique_product_count ?? 0
+      if (!clAgg[u.client_id]) clAgg[u.client_id] = { variants: 0, uploads: 0, apiCost: 0 }
+      clAgg[u.client_id].variants += u.unique_product_count ?? 0
       clAgg[u.client_id].uploads  += 1
       clAgg[u.client_id].apiCost  += u.api_cost_usd ?? 0
     }
@@ -451,7 +447,7 @@ export default function AnalyticsPage() {
       return {
         id, store_name: c?.store_name ?? id.slice(0,8), va_name: c?.va_name ?? '',
         niche: c?.niche ?? null, market: c?.market ?? null,
-        variants: a.variants, products: a.products, uploads: a.uploads,
+        variants: a.variants, uploads: a.uploads,
         tier: tierLabel(a.variants), revenue: tierAmount(a.variants),
         apiCost: a.apiCost,
       }
@@ -522,14 +518,12 @@ export default function AnalyticsPage() {
 
     // ── Processing stats ──────────────────────────────────────────────────────
     const times  = doneUploads.map(u => u.processing_time_seconds).filter(t => t != null) as number[]
-    const allVars = doneUploads.map(u => u.product_row_count ?? 0)
-    const totalVars = allVars.reduce((s, v) => s + v, 0)
-    const allProds  = doneUploads.map(u => u.unique_product_count ?? 0).reduce((s, v) => s + v, 0)
+    const totalVars = doneUploads.reduce((s, u) => s + (u.unique_product_count ?? 0), 0)
     const totalInp = doneUploads.reduce((s, u) => s + (u.api_input_tokens  ?? 0), 0)
     const totalOut = doneUploads.reduce((s, u) => s + (u.api_output_tokens ?? 0), 0)
     const totalCch = doneUploads.reduce((s, u) => s + (u.api_cached_tokens ?? 0), 0)
     const totalFailed = failedUploads.length
-    const varsFailed  = failedUploads.reduce((s, u) => s + (u.product_row_count ?? 0), 0)
+    const varsFailed  = failedUploads.reduce((s, u) => s + (u.unique_product_count ?? 0), 0)
     const partialSucc = doneUploads.filter(u => (u.products_failed ?? 0) > 0).length
 
     let fastestStore = '—', slowestStore = '—', fastestTime = 0, slowestTime = 0
@@ -549,7 +543,7 @@ export default function AnalyticsPage() {
       totalFailed,       variantsFailed: varsFailed,
       avgCostPerUpload:  doneUploads.length > 0 ? apiCosts / doneUploads.length : 0,
       avgCostPerVariant: totalVars > 0 ? apiCosts / totalVars : 0,
-      avgCostPerProduct: allProds  > 0 ? apiCosts / allProds  : 0,
+      avgCostPerProduct: totalVars > 0 ? apiCosts / totalVars : 0,
       cacheHitRate:      (totalInp + totalCch) > 0 ? Math.round(totalCch / (totalInp + totalCch) * 100) : 0,
       totalTokens: totalInp + totalOut + totalCch, inputTokens: totalInp, outputTokens: totalOut, cachedTokens: totalCch,
     })
@@ -557,7 +551,7 @@ export default function AnalyticsPage() {
     // ── Growth comparison ─────────────────────────────────────────────────────
     const prev = prevRange(period, range)
     if (prev && prev.from) {
-      let prevUpQ = supabase.from('uploads').select('va_id,client_id,product_row_count').eq('status', 'done')
+      let prevUpQ = supabase.from('uploads').select('va_id,client_id,unique_product_count').eq('status', 'done')
       if (prev.from) prevUpQ = prevUpQ.gte('processing_completed_at', prev.from)
       if (prev.to)   prevUpQ = prevUpQ.lte('processing_completed_at', prev.to)
       let prevBilQ = supabase.from('billing').select('va_id,total_amount,status').eq('status', 'paid')
@@ -568,12 +562,12 @@ export default function AnalyticsPage() {
       const pUploads = pUp ?? [], pBilling = pBil ?? []
       const pVAs = new Set(pUploads.map(u => u.va_id)).size
       const pClients = new Set(pUploads.map(u => u.client_id).filter(Boolean)).size
-      const pVariants = pUploads.reduce((s, u) => s + (u.product_row_count ?? 0), 0)
+      const pVariants = pUploads.reduce((s, u) => s + (u.unique_product_count ?? 0), 0)
       const pRevenue  = pBilling.reduce((s, b) => s + (b.total_amount ?? 0), 0)
       const curVAs  = new Set(doneUploads.map(u => u.va_id)).size
       const curRevenue = revenueCollected
       setGrowth({
-        cur: { vas: curVAs, clients: new Set(doneUploads.map(u => u.client_id).filter(Boolean)).size, variants: doneUploads.reduce((s, u) => s + (u.product_row_count ?? 0), 0), revenue: curRevenue, avgRevPerVA: curVAs > 0 ? curRevenue / curVAs : 0 },
+        cur: { vas: curVAs, clients: new Set(doneUploads.map(u => u.client_id).filter(Boolean)).size, variants: doneUploads.reduce((s, u) => s + (u.unique_product_count ?? 0), 0), revenue: curRevenue, avgRevPerVA: curVAs > 0 ? curRevenue / curVAs : 0 },
         prv: { vas: pVAs, clients: pClients, variants: pVariants, revenue: pRevenue, avgRevPerVA: pVAs > 0 ? pRevenue / pVAs : 0 },
       })
     } else {
@@ -604,9 +598,9 @@ export default function AnalyticsPage() {
   // ── Export full report ────────────────────────────────────────────────────
   function exportFullReport() {
     const sections: Array<{ name: string; rows: Record<string, unknown>[] }> = [
-      { name: 'daily',   rows: daily.map(r => ({ Date: r.label, Products: r.variants, Unique: r.products, Uploads: r.uploads, VAs: r.vas, Revenue: r.revenue, 'API Cost': r.apiCost, Margin: r.margin })) },
+      { name: 'daily',   rows: daily.map(r => ({ Date: r.label, Products: r.variants, Uploads: r.uploads, VAs: r.vas, Revenue: r.revenue, 'API Cost': r.apiCost, Margin: r.margin })) },
       { name: 'va-perf', rows: vaPerf.map(r => ({ VA: r.name, Country: r.country, Clients: r.clients, Products: r.variants, Uploads: r.uploads, Revenue: r.revenue, 'API Cost': r.apiCost, Profit: r.profit, 'Avg Time': r.avgTime, 'Fail Rate': r.failRate })) },
-      { name: 'clients', rows: clientPerf.map(r => ({ Client: r.store_name, VA: r.va_name, Niche: r.niche, Market: r.market, Products: r.variants, Unique: r.products, Uploads: r.uploads, Tier: r.tier, Revenue: r.revenue, 'API Cost': r.apiCost })) },
+      { name: 'clients', rows: clientPerf.map(r => ({ Client: r.store_name, VA: r.va_name, Niche: r.niche, Market: r.market, Products: r.variants, Uploads: r.uploads, Tier: r.tier, Revenue: r.revenue, 'API Cost': r.apiCost })) },
       { name: 'niche',   rows: nicheRows.map(r => ({ Niche: r.niche, Clients: r.clients, Products: r.variants, Revenue: r.revenue, '%': r.pct })) },
       { name: 'market',  rows: marketRows.map(r => ({ Market: r.market, Clients: r.clients, VAs: r.vas, Products: r.variants, Revenue: r.revenue, '%': r.pct })) },
     ]
@@ -619,26 +613,27 @@ export default function AnalyticsPage() {
 
   // Totals
   const vaTotal = vaPerf.reduce((a, r) => ({ ...a, variants: a.variants + r.variants, uploads: a.uploads + r.uploads, revenue: a.revenue + r.revenue, apiCost: a.apiCost + r.apiCost, profit: a.profit + r.profit }), { variants: 0, uploads: 0, revenue: 0, apiCost: 0, profit: 0 })
-  const clTotal = clientPerf.reduce((a, r) => ({ ...a, variants: a.variants + r.variants, products: a.products + r.products, uploads: a.uploads + r.uploads, revenue: a.revenue + r.revenue, apiCost: a.apiCost + r.apiCost }), { variants: 0, products: 0, uploads: 0, revenue: 0, apiCost: 0 })
-  const dailyTotal = daily.reduce((a, r) => ({ variants: a.variants + r.variants, products: a.products + r.products, uploads: a.uploads + r.uploads, revenue: a.revenue + r.revenue, apiCost: a.apiCost + r.apiCost, margin: a.margin + r.margin }), { variants: 0, products: 0, uploads: 0, revenue: 0, apiCost: 0, margin: 0 })
+  const clTotal = clientPerf.reduce((a, r) => ({ ...a, variants: a.variants + r.variants, uploads: a.uploads + r.uploads, revenue: a.revenue + r.revenue, apiCost: a.apiCost + r.apiCost }), { variants: 0, uploads: 0, revenue: 0, apiCost: 0 })
+  const dailyTotal = daily.reduce((a, r) => ({ variants: a.variants + r.variants, uploads: a.uploads + r.uploads, revenue: a.revenue + r.revenue, apiCost: a.apiCost + r.apiCost, margin: a.margin + r.margin }), { variants: 0, uploads: 0, revenue: 0, apiCost: 0, margin: 0 })
 
   const HDCOL  = { fontSize: 10, fontWeight: 500, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: T.ter }
   const ROWCOL = { padding: '12px 0', borderBottom: `1px solid ${T.row}`, transition: 'opacity 0.15s' }
 
   // ── VA grid layout ─────────────────────────────────────────────────────────
   const VA_GRID = '2fr 0.8fr 0.8fr 1fr 1fr 1fr 1fr 0.8fr 0.8fr 0.8fr'
-  const CL_GRID = '2fr 1.5fr 0.8fr 0.8fr 1fr 0.8fr 1fr 0.5fr 0.8fr 0.8fr'
+  const CL_GRID = '2fr 1.5fr 0.8fr 0.8fr 1fr 1fr 0.5fr 0.8fr 0.8fr'
 
   return (
     <>
       <style>{`
         @media (max-width: 800px) {
-          .ana-stats { grid-template-columns: repeat(3, 1fr) !important; }
-          .ana-fin   { grid-template-columns: 1fr 1fr !important; }
+          .ana-stats { grid-template-columns: repeat(2, 1fr) !important; }
+          .ana-fin   { grid-template-columns: repeat(3, 1fr) !important; }
           .ana-table { overflow-x: auto; }
         }
         @media (max-width: 600px) {
           .ana-stats { grid-template-columns: repeat(2, 1fr) !important; }
+          .ana-fin   { grid-template-columns: repeat(2, 1fr) !important; }
           .ana-pad   { padding: 32px 20px 60px !important; }
         }
       `}</style>
@@ -666,19 +661,20 @@ export default function AnalyticsPage() {
         {loading && <div style={{ fontSize: 13, color: T.ter, marginBottom: 32 }}>Loading…</div>}
 
         {/* ── Section 1: Core metrics ─────────────────────────────────────────── */}
-        <div className="ana-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '28px 32px', marginBottom: 32 }}>
+        <div className="ana-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '28px 32px', marginBottom: 24 }}>
           {[
-            { v: core ? fmtNum(core.variantsProcessed) : '—', l: 'PRODUCTS PROCESSED' },
-            { v: core ? fmtNum(core.uniqueProducts)    : '—', l: 'UNIQUE PRODUCTS' },
-            { v: core ? fmtNum(core.uploads)           : '—', l: 'UPLOADS' },
-            { v: core ? fmtNum(core.activeVAs)         : '—', l: 'ACTIVE VA\'S' },
-            { v: core ? fmtNum(core.activeClients)     : '—', l: 'ACTIVE CLIENTS' },
+            { v: core ? fmtNum(core.products)      : '—', l: 'PRODUCTS' },
+            { v: core ? fmtNum(core.uploads)        : '—', l: 'UPLOADS' },
+            { v: core ? fmtNum(core.activeVAs)      : '—', l: 'ACTIVE VA\'S' },
+            { v: core ? fmtNum(core.activeClients)  : '—', l: 'ACTIVE CLIENTS' },
           ].map(({ v, l }) => (
             <div key={l}>
               <div style={{ fontSize: 36, fontWeight: 600, color: T.black, letterSpacing: '-0.02em', lineHeight: 1 }}>{v}</div>
               <div style={{ fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.12em', color: T.ter, marginTop: 5 }}>{l}</div>
             </div>
           ))}
+        </div>
+        <div className="ana-fin" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '28px 32px', marginBottom: 32 }}>
           {[
             { v: core ? fmtDollar(core.revenueInvoiced)  : '—', l: 'REVENUE (INVOICED)' },
             { v: core ? fmtDollar(core.revenueCollected) : '—', l: 'REVENUE (COLLECTED)' },
@@ -697,24 +693,23 @@ export default function AnalyticsPage() {
 
         {/* ── Section 2: Daily breakdown ─────────────────────────────────────── */}
         <div style={{ marginBottom: 32 }}>
-          <SectionHead label={dailyUseWk ? 'WEEKLY BREAKDOWN' : 'DAILY BREAKDOWN'} onExport={() => downloadCSV(daily.map(r => ({ Date: r.label, Products: r.variants, Unique: r.products, Uploads: r.uploads, VAs: r.vas, Revenue: r.revenue, 'API Cost': r.apiCost, Margin: r.margin })), 'daily-breakdown')} />
+          <SectionHead label={dailyUseWk ? 'WEEKLY BREAKDOWN' : 'DAILY BREAKDOWN'} onExport={() => downloadCSV(daily.map(r => ({ Date: r.label, Products: r.variants, Uploads: r.uploads, VAs: r.vas, Revenue: r.revenue, 'API Cost': r.apiCost, Margin: r.margin })), 'daily-breakdown')} />
           {!range.from && period !== 'custom' ? (
             <div style={{ fontSize: 13, color: T.ter }}>Select a period to see breakdown.</div>
           ) : (
             <div className="ana-table">
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 0.8fr 0.8fr 0.6fr 0.9fr 0.9fr 0.9fr', ...HDCOL, padding: '0 0 8px', borderBottom: `1px solid ${T.row}`, minWidth: 640 }}>
-                {['Date','Products','Unique','Uploads','VA\'s','Revenue','API Cost','Margin'].map(c => <div key={c}>{c}</div>)}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 0.8fr 0.6fr 0.9fr 0.9fr 0.9fr', ...HDCOL, padding: '0 0 8px', borderBottom: `1px solid ${T.row}`, minWidth: 560 }}>
+                {['Date','Products','Uploads','VA\'s','Revenue','API Cost','Margin'].map(c => <div key={c}>{c}</div>)}
               </div>
               {daily.map(r => {
                 const empty = r.variants === 0 && r.uploads === 0
                 return (
-                  <div key={r.key} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 0.8fr 0.8fr 0.6fr 0.9fr 0.9fr 0.9fr', ...ROWCOL, opacity: empty ? 0.4 : 1, minWidth: 640 }}
+                  <div key={r.key} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 0.8fr 0.6fr 0.9fr 0.9fr 0.9fr', ...ROWCOL, opacity: empty ? 0.4 : 1, minWidth: 560 }}
                     onMouseEnter={e => { if (!empty) e.currentTarget.style.opacity = '0.6' }}
                     onMouseLeave={e => e.currentTarget.style.opacity = empty ? '0.4' : '1'}
                   >
                     <div style={{ fontSize: 13, color: T.black }}>{r.label}</div>
                     <div style={{ fontSize: 13, color: T.black }}>{fmtNum(r.variants)}</div>
-                    <div style={{ fontSize: 13, color: T.sec }}>{fmtNum(r.products)}</div>
                     <div style={{ fontSize: 13, color: T.black }}>{r.uploads}</div>
                     <div style={{ fontSize: 13, color: T.sec }}>{r.vas}</div>
                     <div style={{ fontSize: 13, color: T.black }}>{fmtDollar(r.revenue)}</div>
@@ -725,10 +720,9 @@ export default function AnalyticsPage() {
               })}
               {/* Totals row */}
               {daily.length > 0 && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 0.8fr 0.8fr 0.6fr 0.9fr 0.9fr 0.9fr', padding: '12px 0', borderTop: '1px solid #E8E8E8', minWidth: 640 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 0.8fr 0.6fr 0.9fr 0.9fr 0.9fr', padding: '12px 0', borderTop: '1px solid #E8E8E8', minWidth: 560 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: T.black }}>Total</div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: T.black }}>{fmtNum(dailyTotal.variants)}</div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: T.black }}>{fmtNum(dailyTotal.products)}</div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: T.black }}>{dailyTotal.uploads}</div>
                   <div />
                   <div style={{ fontSize: 13, fontWeight: 600, color: T.black }}>{fmtDollar(dailyTotal.revenue)}</div>
@@ -808,10 +802,10 @@ export default function AnalyticsPage() {
 
         {/* ── Section 4: Client performance ──────────────────────────────────── */}
         <div style={{ marginBottom: 32 }}>
-          <SectionHead label="CLIENT PERFORMANCE" onExport={() => downloadCSV(clientPerf.map(r => ({ Client: r.store_name, VA: r.va_name, Niche: r.niche, Market: r.market, Products: r.variants, Unique: r.products, Uploads: r.uploads, Tier: r.tier, Revenue: r.revenue, 'API Cost': r.apiCost })), 'client-performance')} />
+          <SectionHead label="CLIENT PERFORMANCE" onExport={() => downloadCSV(clientPerf.map(r => ({ Client: r.store_name, VA: r.va_name, Niche: r.niche, Market: r.market, Products: r.variants, Uploads: r.uploads, Tier: r.tier, Revenue: r.revenue, 'API Cost': r.apiCost })), 'client-performance')} />
           <div className="ana-table">
             <div style={{ display: 'grid', gridTemplateColumns: CL_GRID, padding: '0 0 8px', borderBottom: `1px solid ${T.row}`, minWidth: 820, columnGap: 8 }}>
-              {[['Client','store_name'],['VA','va_name'],['Niche','niche'],['Market','market'],['Products','variants'],['Unique','products'],['Uploads','uploads'],['Tier','tier'],['Revenue','revenue'],['API Cost','apiCost']].map(([l, c]) => (
+              {[['Client','store_name'],['VA','va_name'],['Niche','niche'],['Market','market'],['Products','variants'],['Uploads','uploads'],['Tier','tier'],['Revenue','revenue'],['API Cost','apiCost']].map(([l, c]) => (
                 <ColHead key={c} label={l} col={c} sort={clSort} onSort={toggleClSort} />
               ))}
             </div>
@@ -827,7 +821,6 @@ export default function AnalyticsPage() {
                   <div style={{ fontSize: 12, color: T.sec, textTransform: 'capitalize' }}>{r.niche?.replace(/_/g, ' ') ?? '—'}</div>
                   <div style={{ fontSize: 12, color: T.sec }}>{r.market ?? '—'}</div>
                   <div style={{ fontSize: 13, color: T.black }}>{fmtNum(r.variants)}</div>
-                  <div style={{ fontSize: 13, color: T.sec }}>{fmtNum(r.products)}</div>
                   <div style={{ fontSize: 13, color: T.black }}>{r.uploads}</div>
                   <div style={{ fontSize: 12, color: T.ter }}>{r.tier}</div>
                   <div style={{ fontSize: 13, color: T.black }}>{fmtDollar(r.revenue)}</div>
@@ -840,7 +833,6 @@ export default function AnalyticsPage() {
                 <div style={{ fontSize: 13, fontWeight: 600, color: T.black }}>Total</div>
                 <div /><div /><div />
                 <div style={{ fontSize: 13, fontWeight: 600, color: T.black }}>{fmtNum(clTotal.variants)}</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: T.black }}>{fmtNum(clTotal.products)}</div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: T.black }}>{clTotal.uploads}</div>
                 <div />
                 <div style={{ fontSize: 13, fontWeight: 600, color: T.black }}>{fmtDollar(clTotal.revenue)}</div>
@@ -973,8 +965,7 @@ export default function AnalyticsPage() {
                 <div style={{ fontSize: 11, color: T.ter, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>Cost Efficiency</div>
                 {[
                   ['Avg cost/upload',  `$${proc.avgCostPerUpload.toFixed(4)}`],
-                  ['Avg cost/product row', `$${proc.avgCostPerVariant.toFixed(6)}`],
-                  ['Avg cost/unique product', `$${proc.avgCostPerProduct.toFixed(5)}`],
+                  ['Avg cost/product', `$${proc.avgCostPerVariant.toFixed(6)}`],
                   ['Cache hit rate',   `${proc.cacheHitRate}%`],
                   ['Total tokens',     `${fmtNum(proc.totalTokens)} (in: ${fmtNum(proc.inputTokens)}, out: ${fmtNum(proc.outputTokens)}, cached: ${fmtNum(proc.cachedTokens)})`],
                 ].map(([l, v]) => (
