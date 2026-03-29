@@ -1017,7 +1017,7 @@ export default function NewClientPage() {
                   value={customData.titlePrompt}
                   onChange={e => setCustomData(prev => ({ ...prev, titlePrompt: e.target.value }))}
                   placeholder="e.g. Always start with the brand name, then product type, then key feature. Max 150 characters. No emoji."
-                  maxLength={2000}
+                  maxLength={50000}
                   style={{
                     width: '100%', fontSize: 13, color: '#111111', background: 'white',
                     border: '1px solid #EEEEEE', borderRadius: 8, padding: '10px 12px',
@@ -1034,7 +1034,7 @@ export default function NewClientPage() {
                   value={customData.descriptionPrompt}
                   onChange={e => setCustomData(prev => ({ ...prev, descriptionPrompt: e.target.value }))}
                   placeholder="e.g. Start with a one-line hook, then 4 bullet points with features, then a closing line. Always mention material and sizing."
-                  maxLength={2000}
+                  maxLength={50000}
                   style={{
                     width: '100%', fontSize: 13, color: '#111111', background: 'white',
                     border: '1px solid #EEEEEE', borderRadius: 8, padding: '10px 12px',

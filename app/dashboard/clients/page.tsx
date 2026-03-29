@@ -788,15 +788,12 @@ function ClientRow({
                     value={requestMessage}
                     onChange={e => setRequestMessage(e.target.value)}
                     placeholder={'e.g. "Short titles, brand name first, no emoji. Formal tone. UK market. Always mention material and size."'}
-                    maxLength={2000}
+                    maxLength={50000}
                     rows={6}
                     style={{ width: '100%', padding: '12px 14px', fontSize: 14, color: '#111111', border: '1px solid #EEEEEE', borderRadius: 10, outline: 'none', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box', background: 'white', transition: 'border-color 0.15s' }}
                     onFocus={e => { e.currentTarget.style.borderColor = '#111111' }}
                     onBlur={e => { e.currentTarget.style.borderColor = '#EEEEEE' }}
                   />
-                  <p style={{ fontSize: 11, color: '#DDDDDD', textAlign: 'right', marginTop: 4 }}>
-                    {requestMessage.length}/2000
-                  </p>
 
                   <div style={{ marginTop: 20 }}>
                     <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: '#CCCCCC', textTransform: 'uppercase', marginBottom: 10 }}>ATTACHMENTS</p>
