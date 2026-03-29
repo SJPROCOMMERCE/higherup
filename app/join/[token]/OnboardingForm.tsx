@@ -120,14 +120,14 @@ function PrimaryBtn({ label = 'Continue →', disabled, onClick, loading }: {
     <button
       disabled={!on} onClick={onClick}
       style={{
-        width: '100%', padding: '15px 0', borderRadius: 10,
-        fontSize: 14, fontWeight: 500, border: 'none',
+        width: '100%', padding: '16px 0', borderRadius: 9999, border: 'none',
+        fontSize: 15, fontWeight: 500,
         cursor:     on ? 'pointer' : 'not-allowed',
-        background: on ? C.black : '#F5F5F5',
-        color:      on ? C.white : C.ghost,
+        background: on ? C.black : '#F0F0F0',
+        color:      on ? C.white : '#CCCCCC',
         fontFamily: 'inherit', transition: 'opacity 0.15s',
       }}
-      onMouseEnter={e => { if (on) e.currentTarget.style.opacity = '0.85' }}
+      onMouseEnter={e => { if (on) e.currentTarget.style.opacity = '0.9' }}
       onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
     >
       {loading ? '···' : label}
@@ -136,17 +136,22 @@ function PrimaryBtn({ label = 'Continue →', disabled, onClick, loading }: {
 }
 
 function GhostBtn({ label, onClick, disabled }: { label: string; onClick?: () => void; disabled?: boolean }) {
+  const on = !disabled
   return (
     <button
       onClick={onClick} disabled={disabled}
       style={{
-        background: 'none', border: 'none',
-        cursor: disabled ? 'default' : 'pointer',
-        fontSize: 13, color: disabled ? C.light : C.ghost,
-        fontFamily: 'inherit', padding: '10px 0', transition: 'color 0.15s',
+        display: 'block', margin: '0 auto',
+        width: '100%', maxWidth: 320, padding: '16px 32px',
+        borderRadius: 9999, border: 'none',
+        cursor:     on ? 'pointer' : 'not-allowed',
+        background: on ? C.black : '#F0F0F0',
+        color:      on ? C.white : '#CCCCCC',
+        fontSize: 15, fontWeight: 500,
+        fontFamily: 'inherit', transition: 'opacity 0.15s',
       }}
-      onMouseEnter={e => { if (!disabled) e.currentTarget.style.color = C.black }}
-      onMouseLeave={e => { e.currentTarget.style.color = disabled ? C.light : C.ghost }}
+      onMouseEnter={e => { if (on) e.currentTarget.style.opacity = '0.9' }}
+      onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
     >
       {label} →
     </button>
@@ -164,7 +169,7 @@ function RevealScreen({
     <div style={{ textAlign: 'center', padding: '0 4px' }}>
       {children}
       <div style={{
-        marginTop: 72,
+        marginTop: 64,
         opacity:   showBtn ? 1 : 0,
         transform: showBtn ? 'translateY(0)' : 'translateY(8px)',
         transition: 'opacity 0.7s ease-out, transform 0.7s ease-out',

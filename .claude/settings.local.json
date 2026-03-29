@@ -77,7 +77,9 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(git rm:*)",
-      "Bash(sips -g pixelWidth -g pixelHeight /Users/safouaneelajjouri/Documents/HigherUp/public/logo.png)"
+      "Bash(sips -g pixelWidth -g pixelHeight /Users/safouaneelajjouri/Documents/HigherUp/public/logo.png)",
+      "Bash(grep -n \"Continue\\\\|continueText\\\\|onContinue\\\\|button\\\\|btn\\\\|pill\" /Users/safouaneelajjouri/Documents/HigherUp/app/join/[token]/OnboardingForm.tsx)",
+      "Bash(head -20 /Users/safouaneelajjouri/Documents/HigherUp/app/join/[token]/OnboardingForm.tsx)"
     ]
   }
 }

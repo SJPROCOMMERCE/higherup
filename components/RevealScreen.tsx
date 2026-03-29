@@ -46,15 +46,17 @@ export function RevealScreen({
           onClick={onContinue}
           disabled={loading}
           style={{
-            background: 'none', border: 'none',
-            cursor: loading ? 'default' : 'pointer',
-            fontSize: 13,
-            color: '#CCCCCC',
-            fontFamily: 'inherit', padding: '12px 0', minHeight: 44,
-            transition: 'color 0.15s',
+            display: 'block', margin: '0 auto',
+            width: '100%', maxWidth: 320, padding: '16px 32px',
+            borderRadius: 9999, border: 'none',
+            cursor:     loading ? 'not-allowed' : 'pointer',
+            background: loading ? '#F0F0F0' : '#111111',
+            color:      loading ? '#CCCCCC'  : '#FFFFFF',
+            fontSize: 15, fontWeight: 500,
+            fontFamily: 'inherit', transition: 'opacity 0.15s',
           }}
-          onMouseEnter={e => { if (!loading) e.currentTarget.style.color = '#111111' }}
-          onMouseLeave={e => { e.currentTarget.style.color = '#CCCCCC' }}
+          onMouseEnter={e => { if (!loading) e.currentTarget.style.opacity = '0.9' }}
+          onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
         >
           {loading ? '···' : `${continueText} →`}
         </button>
