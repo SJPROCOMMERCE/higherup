@@ -954,7 +954,7 @@ function UploadForm() {
 
   // ─── Tier math (variant-based) ─────────────────────────────────────────────
   const monthCount  = monthUploads.reduce((s, u) => s + (u.product_row_count ?? 0), 0)
-  const uploadCount = parseResult?.rows ?? 0   // variants in this upload
+  const uploadCount = parseResult?.productCount ?? 0   // unique products in this upload
   const newTotal    = monthCount + uploadCount
   const currentTier = getTierSync(pricingTiers, monthCount)
   const newTier     = getTierSync(pricingTiers, newTotal)
@@ -979,7 +979,7 @@ function UploadForm() {
         <div style={{ marginBottom: 56 }} className="s1">
           <div style={{ fontSize: 22, fontWeight: 600, color: T.black }}>{successMeta.storeName}</div>
           <div style={{ fontSize: 13, color: T.ter, marginTop: 4 }}>
-            {successMeta.rows} products · {successMeta.fileName}
+            {successMeta.productCount} products · {successMeta.fileName}
           </div>
         </div>
         <div key={status} className="status-fade">
@@ -1215,11 +1215,11 @@ function UploadForm() {
                     </div>
                     <div style={{ fontSize: 11, color: T.ter, marginTop: 1 }}>
                       {sheetSource ? (
-                        <>Google Sheet{!parsing && parseResult ? ` · ${parseResult.rows} products` : ''}</>
+                        <>Google Sheet{!parsing && parseResult ? ` · ${parseResult.productCount} products` : ''}</>
                       ) : (
                         <>
                           {(file!.size / 1024).toFixed(0)} KB
-                          {parsing ? ' · Parsing…' : (parseResult ? ` · ${parseResult.rows} products` : '')}
+                          {parsing ? ' · Parsing…' : (parseResult ? ` · ${parseResult.productCount} products` : '')}
                         </>
                       )}
                     </div>
@@ -1365,10 +1365,7 @@ function UploadForm() {
           <div style={{ display: 'flex', gap: 40, flexWrap: 'wrap' }}>
             <div>
               <div style={{ fontSize: 9, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#DDDDDD', marginBottom: 4 }}>Products</div>
-              <div style={{ fontSize: 26, fontWeight: 600, color: T.black, lineHeight: 1 }}>{parseResult.rows}</div>
-              {parseResult.rows !== parseResult.productCount && (
-                <div style={{ fontSize: 11, color: '#CCCCCC', marginTop: 2 }}>from {parseResult.productCount} unique products</div>
-              )}
+              <div style={{ fontSize: 26, fontWeight: 600, color: T.black, lineHeight: 1 }}>{parseResult.productCount}</div>
             </div>
             <div>
               <div style={{ fontSize: 9, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#DDDDDD', marginBottom: 4 }}>Store match</div>
