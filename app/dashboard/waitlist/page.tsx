@@ -127,7 +127,7 @@ export default function WaitlistPage() {
 
         {/* Heading */}
         <div style={{ fontSize: 32, fontWeight: 300, color: T.black, marginBottom: 8 }}>
-          You&apos;re on the list, {firstName}.
+          You&apos;re almost ready to start earning, {firstName}.
         </div>
         <div style={{ fontSize: 14, color: T.ter, marginBottom: 48 }}>
           We&apos;re reviewing your profile. You&apos;ll get access as soon as possible.
