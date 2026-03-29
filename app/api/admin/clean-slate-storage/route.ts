@@ -50,7 +50,7 @@ async function clearFolder(
   return { deleted, errors }
 }
 
-export async function POST() {
+async function run() {
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -84,3 +84,6 @@ export async function POST() {
     errors: allErrors,
   })
 }
+
+export async function GET() { return run() }
+export async function POST() { return run() }
