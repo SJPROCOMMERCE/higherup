@@ -47,22 +47,23 @@ body {
   background: #FFFFFF !important;
   background-color: #FFFFFF !important;
   border: 1px solid #EEEEEE !important;
-  border-radius: 0 !important;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.06) !important;
-  z-index: 50 !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08) !important;
+  z-index: 9999 !important;
 }
 
 .hu-dropdown-option {
   background: #FFFFFF !important;
   background-color: #FFFFFF !important;
+  color: inherit;
   cursor: pointer;
   transition: background-color 0.1s;
 }
 
 .hu-dropdown-option:hover,
 .hu-dropdown-option.is-selected {
-  background: #FAFAFA !important;
-  background-color: #FAFAFA !important;
+  background: #F5F5F7 !important;
+  background-color: #F5F5F7 !important;
 }
 
 /* ─── Wave dots (processing indicator) ───────────────────── */

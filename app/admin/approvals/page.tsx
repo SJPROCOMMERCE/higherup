@@ -184,7 +184,7 @@ function PromptDropdown({
         <span style={{ fontSize: 10, color: T.ter }}>▾</span>
       </button>
       {open && (
-        <div className="hu-dropdown-list" style={{ top: '100%', left: 0, right: 0, maxHeight: 200, overflowY: 'auto' }}>
+        <div className="hu-dropdown-list" style={{ top: '100%', left: 0, right: 0, maxHeight: 200, overflowY: 'auto', background: '#FFFFFF', backgroundColor: '#FFFFFF' }}>
           {prompts.map(p => (
             <button
               key={p.id}

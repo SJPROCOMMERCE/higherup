@@ -299,7 +299,7 @@ function ClientDropdown({
         {!loading && <span style={{ fontSize: 10, color: T.ter }}>▾</span>}
       </button>
       {open && (
-        <div className="hu-dropdown-list" style={{ top: '100%', left: 0, right: 0, maxHeight: 240, overflowY: 'auto' }}>
+        <div className="hu-dropdown-list" style={{ top: '100%', left: 0, right: 0, maxHeight: 240, overflowY: 'auto', background: '#FFFFFF', backgroundColor: '#FFFFFF' }}>
           {options.length === 0
             ? <div style={{ padding: '12px 14px', fontSize: 13, color: T.ter }}>No approved clients</div>
             : options.map(opt => (

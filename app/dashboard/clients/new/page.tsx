@@ -256,7 +256,7 @@ function CustomDropdown({
         <span style={{ color: T.ter, fontSize: 9, marginLeft: 8 }}>{open ? '▲' : '▼'}</span>
       </div>
       {open && (
-        <div className="hu-dropdown-list" style={{ top: '100%', left: 0, right: 0, maxHeight: 200, overflowY: 'auto' }}>
+        <div className="hu-dropdown-list" style={{ top: '100%', left: 0, right: 0, maxHeight: 200, overflowY: 'auto', background: '#FFFFFF', backgroundColor: '#FFFFFF' }}>
           {options.map(o => (
             <div
               key={o.value}
@@ -340,7 +340,7 @@ function SearchableDropdown({
 
       {/* Dropdown */}
       {open && (
-        <div className="hu-dropdown-list" style={{ top: '100%', left: 0, right: 0 }}>
+        <div className="hu-dropdown-list" style={{ top: '100%', left: 0, right: 0, background: '#FFFFFF', backgroundColor: '#FFFFFF' }}>
           {/* Search input */}
           <div style={{ padding: '8px 12px', borderBottom: `1px solid ${T.div}` }}>
             <input

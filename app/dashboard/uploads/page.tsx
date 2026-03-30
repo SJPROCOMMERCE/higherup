@@ -493,7 +493,7 @@ function MoreDropdown({
         More ▾
       </button>
       {open && (
-        <div className="hu-dropdown-list" style={{ top: '110%', left: 0, minWidth: 160 }}>
+        <div className="hu-dropdown-list" style={{ top: '110%', left: 0, minWidth: 160, background: '#FFFFFF', backgroundColor: '#FFFFFF' }}>
           {clients.map(c => (
             <button
               key={c.id}
