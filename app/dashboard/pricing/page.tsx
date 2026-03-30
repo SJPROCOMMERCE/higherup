@@ -134,7 +134,20 @@ export default function PricingPage() {
       <div style={{ marginTop: 48, display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 32 }}>
         <Inp label="CLIENTS"             value={clients}          onChange={setClients} />
         <Inp label="PRODUCTS PER CLIENT" value={productsPerClient} onChange={setProductsPerClient} />
-        <Inp label="YOUR RATE / PRODUCT" value={ratePerProduct}   onChange={setRatePerProduct} prefix="$" decimal />
+        <div>
+          <Inp label="YOUR RATE / PRODUCT" value={ratePerProduct} onChange={setRatePerProduct} prefix="$" decimal />
+          {numRate > 0 && numRate < 0.50 && (
+            <div style={{ marginTop: 10, padding: '10px 12px', background: '#FFFBEB', borderRadius: 8 }}>
+              <p style={{ fontSize: 13, color: '#92400E', margin: 0 }}>
+                We recommend at least $0.50 per product.
+              </p>
+              <p style={{ fontSize: 12, color: '#B45309', margin: '4px 0 0' }}>
+                At this rate your margins become too thin to build something sustainable.
+                Most successful operators charge between $0.65 and $1.20.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* You earn */}

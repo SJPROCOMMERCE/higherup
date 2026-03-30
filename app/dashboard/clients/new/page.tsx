@@ -853,6 +853,16 @@ export default function NewClientPage() {
             You can set this later, but we recommend setting it now to track your earnings.
           </div>
         )}
+        {parseFloat(form.va_rate_per_product) > 0 && parseFloat(form.va_rate_per_product) < 0.50 && (
+          <div style={{ marginTop: 8, padding: '10px 12px', background: '#FFFBEB', borderRadius: 8 }}>
+            <p style={{ fontSize: 13, color: '#92400E', margin: 0 }}>
+              We recommend at least $0.50 per product.
+            </p>
+            <p style={{ fontSize: 12, color: '#B45309', margin: '4px 0 0' }}>
+              At this rate your margins become too thin. Most operators charge $0.65–$1.20.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* 7. Title Preference */}

@@ -618,6 +618,13 @@ function ClientRow({
                   {rateSaved && <span style={{ fontSize: 11, color: '#10B981' }}>Saved ✓</span>}
                   {savingRate && <span style={{ fontSize: 11, color: '#CCCCCC' }}>Saving…</span>}
                 </div>
+                {parseFloat(vaRate) > 0 && parseFloat(vaRate) < 0.50 && (
+                  <div style={{ marginTop: 8, padding: '8px 10px', background: '#FFFBEB', borderRadius: 6 }}>
+                    <p style={{ fontSize: 12, color: '#92400E', margin: 0 }}>
+                      We recommend at least $0.50 per product. Most operators charge $0.65–$1.20.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <InfoRow label="Est. products" value={client.expected_monthly_products ? `${client.expected_monthly_products.toLocaleString()} / month` : null} />
