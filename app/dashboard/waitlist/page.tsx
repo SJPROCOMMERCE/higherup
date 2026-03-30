@@ -125,6 +125,26 @@ export default function WaitlistPage() {
           <img src="/logo.png" alt="HigherUp" style={{ height: 34, width: 'auto', display: 'block', margin: '0 auto' }} />
         </div>
 
+        {/* Loom onboarding video */}
+        <div style={{ maxWidth: 720, width: '100%', margin: '0 auto 56px' }}>
+          <p style={{ fontSize: 22, fontWeight: 500, color: T.black, marginBottom: 24 }}>
+            Check Our Onboarding Video To Start Fresh
+          </p>
+          <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', borderRadius: 16, overflow: 'hidden' }}>
+            <iframe
+              src="https://www.loom.com/embed/8db97b7808514a0089d42e3d2b346815"
+              frameBorder={0}
+              allowFullScreen
+              allow="autoplay; fullscreen"
+              style={{
+                position: 'absolute', top: 0, left: 0,
+                width: '100%', height: '100%',
+                border: 'none', borderRadius: 16,
+              }}
+            />
+          </div>
+        </div>
+
         {/* Heading */}
         <div style={{ fontSize: 32, fontWeight: 300, color: T.black, marginBottom: 8 }}>
           You&apos;re almost ready to start earning, {firstName}.
