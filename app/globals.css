@@ -29,13 +29,17 @@ body {
 
 /* ─── Animation utilities ─────────────────────────────────── */
 
-.s1 { animation: fadeUp 0.3s ease 0ms    both; }
-.s2 { animation: fadeUp 0.3s ease 80ms   both; }
-.s3 { animation: fadeUp 0.3s ease 160ms  both; }
-.s4 { animation: fadeUp 0.3s ease 240ms  both; }
-.s5 { animation: fadeUp 0.3s ease 320ms  both; }
-.s6 { animation: fadeUp 0.3s ease 400ms  both; }
-.s7 { animation: fadeUp 0.3s ease 480ms  both; }
+/* Reversed z-index: earlier steps render above later steps.
+   This ensures a dropdown in step N always appears above steps N+1, N+2 etc.
+   (Each animation step creates a stacking context via transform; z-index
+   on the stacking context itself controls which context wins.) */
+.s1 { animation: fadeUp 0.3s ease 0ms    both; position: relative; z-index: 70; }
+.s2 { animation: fadeUp 0.3s ease 80ms   both; position: relative; z-index: 60; }
+.s3 { animation: fadeUp 0.3s ease 160ms  both; position: relative; z-index: 50; }
+.s4 { animation: fadeUp 0.3s ease 240ms  both; position: relative; z-index: 40; }
+.s5 { animation: fadeUp 0.3s ease 320ms  both; position: relative; z-index: 30; }
+.s6 { animation: fadeUp 0.3s ease 400ms  both; position: relative; z-index: 20; }
+.s7 { animation: fadeUp 0.3s ease 480ms  both; position: relative; z-index: 10; }
 
 .pulse-dot {
   animation: pulseDot 1.5s ease infinite;
