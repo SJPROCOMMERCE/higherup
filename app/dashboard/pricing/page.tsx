@@ -1,304 +1,255 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useVA } from '@/context/va-context'
-import { supabase } from '@/lib/supabase'
-import { getTiers, getTierSync, formatTierRange, DEFAULT_TIERS, type Tier } from '@/lib/pricing'
-import type { Client } from '@/lib/supabase'
+import { useState } from 'react'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
 const T = {
   black:  '#111111',
-  gray:   '#86868B',
+  sec:    '#999999',
   ghost:  '#CCCCCC',
-  light:  '#F5F5F7',
+  div:    '#F5F5F5',
   border: '#EEEEEE',
-  white:  '#FFFFFF',
-  green:  '#10B981',
+  green:  '#2DB87E',
 }
 
-// ─── FAQ ──────────────────────────────────────────────────────────────────────
+const label9: React.CSSProperties = {
+  fontSize: 10,
+  textTransform: 'uppercase',
+  letterSpacing: '0.12em',
+  color: T.ghost,
+}
 
-const FAQ_ITEMS = [
-  {
-    q: 'What counts as a product?',
-    a: 'Every row in your CSV or spreadsheet is counted as a product row. If a product has 5 sizes and 3 colors, that\'s 15 rows. The header row and image-only rows don\'t count.',
-  },
-  {
-    q: 'When does my count reset?',
-    a: 'On the 1st of every month. Your product count starts at zero.',
-  },
-  {
-    q: 'What if I go over a tier mid-month?',
-    a: 'You\'re billed based on the total at the end of the month. If you start at Starter tier but process more than 200 products, you\'ll move to Growth tier for that client.',
-  },
-  {
-    q: 'Can different clients be on different tiers?',
-    a: 'Yes. Each client has their own tier based on their own product count. One client on Starter and another on Professional is normal.',
-  },
-  {
-    q: 'When do I pay?',
-    a: 'Invoices are generated on the 1st of the month. Payment is due within 48 hours.',
-  },
-  {
-    q: 'What happens if I don\'t pay?',
-    a: 'Your account is paused after 48 hours. After 14 days of non-payment, your account is deleted.',
-  },
-]
+// ─── Tier lookup ──────────────────────────────────────────────────────────────
 
-// ─── Divider ──────────────────────────────────────────────────────────────────
+function getSharePerClient(products: number): number {
+  if (products <= 200)  return 50
+  if (products <= 400)  return 110
+  if (products <= 1000) return 220
+  return 350
+}
 
-function Divider() {
-  return <div style={{ height: 1, background: '#F0F0F0', marginBlock: 32 }} />
+function fmt(n: number) {
+  return n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+}
+
+// ─── Input ────────────────────────────────────────────────────────────────────
+
+function Inp({
+  label, prefix, value, onChange, decimal = false,
+}: {
+  label: string
+  prefix?: string
+  value: string
+  onChange: (v: string) => void
+  decimal?: boolean
+}) {
+  const [focused, setFocused] = useState(false)
+  const pattern = decimal ? /^\d*\.?\d*$/ : /^\d*$/
+  return (
+    <div>
+      <p style={label9}>{label}</p>
+      <div style={{ display: 'flex', alignItems: 'baseline', marginTop: 8 }}>
+        {prefix && (
+          <span style={{ fontSize: 32, fontWeight: 600, color: T.ghost, lineHeight: 1 }}>{prefix}</span>
+        )}
+        <input
+          type="text"
+          inputMode={decimal ? 'decimal' : 'numeric'}
+          value={value}
+          onChange={e => {
+            const v = e.target.value
+            if (v === '' || pattern.test(v)) onChange(v)
+          }}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          style={{
+            width: '100%',
+            fontSize: 32,
+            fontWeight: 600,
+            color: T.black,
+            borderBottom: `1.5px solid ${focused ? T.black : T.border}`,
+            outline: 'none',
+            background: 'transparent',
+            paddingBottom: 6,
+            fontFamily: 'inherit',
+            transition: 'border-color 0.15s',
+          }}
+        />
+      </div>
+    </div>
+  )
+}
+
+// ─── Row ──────────────────────────────────────────────────────────────────────
+
+function Row({ label, value, color = T.sec, weight = 400, borderTop = true }: {
+  label: string; value: string; color?: string; weight?: number; borderTop?: boolean
+}) {
+  return (
+    <div style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: '12px 0',
+      borderTop: borderTop ? `1px solid ${T.div}` : undefined,
+    }}>
+      <span style={{ fontSize: 14, color, fontWeight: weight }}>{label}</span>
+      <span style={{ fontSize: 14, color, fontWeight: weight }}>{value}</span>
+    </div>
+  )
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function PricingPage() {
-  const { currentVA } = useVA()
-  const [tiers, setTiers]             = useState<Tier[]>(DEFAULT_TIERS)
-  const [clients, setClients]         = useState<Client[]>([])
-  const [loading, setLoading]         = useState(true)
-  const [calcClients, setCalcClients] = useState<number | string>(3)
-  const [calcVariants, setCalcVariants] = useState<number | string>(250)
-  const [openFaq, setOpenFaq]         = useState<number | null>(null)
+  const [clients,          setClients]          = useState('5')
+  const [productsPerClient, setProductsPerClient] = useState('200')
+  const [ratePerProduct,   setRatePerProduct]   = useState('0.65')
 
-  useEffect(() => {
-    getTiers().then(setTiers)
-  }, [])
+  const numClients  = parseFloat(clients)          || 0
+  const numProducts = parseFloat(productsPerClient) || 0
+  const numRate     = parseFloat(ratePerProduct)    || 0
 
-  useEffect(() => {
-    if (!currentVA?.id) return
-    supabase
-      .from('clients')
-      .select('id, store_name, current_month_variants, is_active, approval_status')
-      .eq('va_id', currentVA.id)
-      .eq('approval_status', 'approved')
-      .eq('is_active', true)
-      .then(({ data }) => {
-        setClients((data ?? []) as Client[])
-        setLoading(false)
-      })
-  }, [currentVA?.id])
+  const earnedPerClient  = numProducts * numRate
+  const sharePerClient   = getSharePerClient(numProducts)
+  const profitPerClient  = earnedPerClient - sharePerClient
 
-  // Determine current tier from highest-variant client
-  const maxVariants  = clients.reduce((max, c) => Math.max(max, c.current_month_variants ?? 0), 0)
-  const currentTier  = getTierSync(tiers, maxVariants)
+  const totalEarned  = earnedPerClient * numClients
+  const totalShare   = sharePerClient  * numClients
+  const totalProfit  = profitPerClient * numClients
+
+  const profitPct    = totalEarned > 0 ? Math.round((totalProfit / totalEarned) * 100) : 0
+  const hoursPerMonth = numClients * 2
+  const hourlyRate    = hoursPerMonth > 0 ? totalProfit / hoursPerMonth : 0
 
   return (
-    <div style={{
-      maxWidth: 900,
-      margin: '0 auto',
-      paddingInline: 48,
-      paddingBottom: 80,
-      fontFamily: "'Inter', system-ui, sans-serif",
-    }}>
+    <div style={{ maxWidth: 880, margin: '0 auto', padding: '48px 24px' }}>
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div style={{ textAlign: 'center', paddingTop: 56, paddingBottom: 48 }}>
-        <h1 style={{ fontSize: 28, fontWeight: 300, color: T.black, margin: 0, letterSpacing: '-0.02em' }}>
-          Pricing
-        </h1>
-        <p style={{ fontSize: 13, color: T.ghost, marginTop: 8, marginBottom: 4 }}>
-          Simple pricing based on how many products you process.
+      {/* Header */}
+      <h1 style={{ fontSize: 28, fontWeight: 300, color: T.black, margin: 0 }}>Your earnings</h1>
+      <p style={{ marginTop: 8, fontSize: 14, color: T.ghost }}>See exactly what you take home.</p>
+
+      {/* Inputs */}
+      <div style={{ marginTop: 48, display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 32 }}>
+        <Inp label="CLIENTS"             value={clients}          onChange={setClients} />
+        <Inp label="PRODUCTS PER CLIENT" value={productsPerClient} onChange={setProductsPerClient} />
+        <Inp label="YOUR RATE / PRODUCT" value={ratePerProduct}   onChange={setRatePerProduct} prefix="$" decimal />
+      </div>
+
+      {/* You earn */}
+      <div style={{ marginTop: 64, textAlign: 'center' }}>
+        <p style={label9}>YOU EARN</p>
+        <p style={{ marginTop: 8, fontSize: 64, fontWeight: 600, color: T.green, lineHeight: 1 }}>
+          ${fmt(totalEarned)}
         </p>
-        <p style={{ fontSize: 13, color: T.black, marginTop: 0 }}>
-          No signup fees. No deposits. Pay at the end of each month.
+        <p style={{ marginTop: 8, fontSize: 14, color: T.ghost }}>
+          {numClients} client{numClients !== 1 ? 's' : ''} × {numProducts} products × ${numRate}
         </p>
       </div>
 
-      {/* ── Tier cards ─────────────────────────────────────────────────────── */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-        gap: 16,
-        marginBottom: 8,
-      }}>
-        {tiers.map(tier => {
-          const isCurrentTier = tier.tier_name === currentTier.tier_name
-          return (
-            <div
-              key={tier.id}
-              style={{
-                border: `1px solid ${isCurrentTier ? T.black : T.border}`,
-                borderRadius: 12,
-                padding: 24,
-                position: 'relative',
-                transition: 'border-color 0.15s',
-              }}
-              onMouseEnter={e => { if (!isCurrentTier) e.currentTarget.style.borderColor = T.ghost }}
-              onMouseLeave={e => { if (!isCurrentTier) e.currentTarget.style.borderColor = T.border }}
-            >
-              {isCurrentTier && (
-                <div style={{ fontSize: 10, fontWeight: 500, color: T.black, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 }}>
-                  Your current tier
-                </div>
-              )}
-              <div style={{ fontSize: 16, fontWeight: 500, color: T.black, marginBottom: 12 }}>{tier.display_name}</div>
-              <div style={{ fontSize: 36, fontWeight: 600, color: T.black, marginBottom: 2 }}>${tier.amount}</div>
-              <div style={{ fontSize: 12, color: T.ghost, marginBottom: 16 }}>/month per client</div>
-              <div style={{ height: 1, background: '#F0F0F0', marginBottom: 16 }} />
-              <div style={{ fontSize: 13, color: T.gray, marginBottom: 8 }}>{formatTierRange(tier)} products / month</div>
-              {tier.description && (
-                <div style={{ fontSize: 12, color: T.ghost, lineHeight: 1.5 }}>{tier.description}</div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-
-      <Divider />
-
-      {/* ── How it works ───────────────────────────────────────────────────── */}
-      <div>
-        <div style={{ fontSize: 10, color: T.ghost, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 20 }}>
-          HOW IT WORKS
+      {/* Bar */}
+      <div style={{ marginTop: 48, maxWidth: 400, margin: '48px auto 0' }}>
+        <div style={{
+          height: 10, borderRadius: 99, background: T.border, overflow: 'hidden',
+        }}>
+          <div style={{
+            height: '100%', borderRadius: 99, background: T.green,
+            width: `${Math.max(0, Math.min(100, profitPct))}%`,
+            transition: 'width 0.4s ease',
+          }} />
         </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 500, color: T.green }}>${fmt(totalProfit)} yours</p>
+            <p style={{ fontSize: 11, color: T.ghost }}>{profitPct}%</p>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <p style={{ fontSize: 13, color: T.ghost }}>${fmt(totalShare)} HigherUp</p>
+            <p style={{ fontSize: 11, color: '#DDDDDD' }}>{100 - profitPct}%</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Monthly profit — biggest number */}
+      <div style={{ marginTop: 64, textAlign: 'center' }}>
+        <p style={label9}>YOUR MONTHLY PROFIT</p>
+        <p style={{ marginTop: 8, fontSize: 72, fontWeight: 600, color: T.black, lineHeight: 1 }}>
+          ${fmt(totalProfit)}
+        </p>
+      </div>
+
+      {/* Context stats */}
+      <div style={{ marginTop: 48, display: 'flex', justifyContent: 'center', gap: 64 }}>
         {[
-          'Each client you serve has their own tier based on how many products you process for them per month.',
-          'Product count is the total number of rows processed across all uploads for that client in a month.',
-          'If a client has 3 uploads of 100 products each, that\'s 300 products = Growth tier ($110).',
-          'Your monthly invoice is the sum of all your client tiers.',
-        ].map((step, i) => (
-          <div key={i} style={{ fontSize: 13, color: T.gray, marginBottom: 12, display: 'flex', gap: 16 }}>
-            <span style={{ color: T.ghost, flexShrink: 0 }}>{i + 1}.</span>
-            <span>{step}</span>
+          { value: `$${fmt(hourlyRate)}`, label: '/HOUR' },
+          { value: `${hoursPerMonth}h`,    label: '/MONTH' },
+          { value: `$${fmt(totalProfit * 12)}`, label: '/YEAR' },
+        ].map(s => (
+          <div key={s.label} style={{ textAlign: 'center' }}>
+            <p style={{ fontSize: 28, fontWeight: 600, color: T.black }}>{s.value}</p>
+            <p style={{ ...label9, marginTop: 4 }}>{s.label}</p>
           </div>
         ))}
       </div>
 
-      <Divider />
+      {/* Divider */}
+      <div style={{ marginTop: 80, borderTop: `1px solid ${T.div}` }} />
 
-      {/* ── Your current month ─────────────────────────────────────────────── */}
-      <div>
-        <div style={{ fontSize: 10, color: T.ghost, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 20 }}>
-          YOUR CURRENT MONTH
+      {/* Per client breakdown */}
+      <div style={{ marginTop: 48 }}>
+        <p style={label9}>PER CLIENT BREAKDOWN</p>
+        <div style={{ marginTop: 16, maxWidth: 500 }}>
+          <Row label="You charge your client" value={`$${fmt(earnedPerClient)}`} color={T.black} weight={500} borderTop={false} />
+          <Row label="HigherUp share"          value={`−$${fmt(sharePerClient)}`} color={T.ghost} />
+          <Row label="You keep"                value={`$${fmt(profitPerClient)}`} color={T.green}  weight={600} />
         </div>
+      </div>
 
-        {loading ? (
-          <div style={{ fontSize: 13, color: T.ghost }}>Loading…</div>
-        ) : clients.length === 0 ? (
-          <div style={{ fontSize: 13, color: T.ghost }}>No active clients yet.</div>
-        ) : (
-          <>
-            {clients.map(c => {
-              const variants = c.current_month_variants ?? 0
-              const tier     = getTierSync(tiers, variants)
-              return (
-                <div key={c.id} style={{ display: 'flex', alignItems: 'center', paddingBlock: 10, borderBottom: '1px solid #F5F5F5' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 500, color: T.black }}>{c.store_name}</div>
-                    <div style={{ fontSize: 13, color: T.gray, marginTop: 2 }}>{variants.toLocaleString()} products this month</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 13, color: T.black }}>→ {tier.display_name} · ${tier.amount}</div>
-                  </div>
-                </div>
-              )
-            })}
+      {/* Divider */}
+      <div style={{ marginTop: 48, borderTop: `1px solid ${T.div}` }} />
 
-            <div style={{ paddingTop: 20, borderTop: '1px solid #F0F0F0', marginTop: 8 }}>
-              {(() => {
-                const total = clients.reduce((s, c) => s + getTierSync(tiers, c.current_month_variants ?? 0).amount, 0)
-                return (
-                  <>
-                    <div style={{ fontSize: 18, fontWeight: 600, color: T.black }}>Total estimated invoice: ${total}</div>
-                    <div style={{ fontSize: 12, color: T.ghost, marginTop: 4 }}>
-                      Based on {clients.length} active client{clients.length !== 1 ? 's' : ''}
-                    </div>
-                  </>
-                )
-              })()}
+      {/* How it works */}
+      <div style={{ marginTop: 48, maxWidth: 440 }}>
+        <p style={label9}>HOW IT WORKS</p>
+        <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <p style={{ fontSize: 14, color: T.sec, lineHeight: 1.7, margin: 0 }}>
+            You set your own rate. You charge your clients directly. You keep the majority.
+          </p>
+          <p style={{ fontSize: 14, color: T.sec, lineHeight: 1.7, margin: 0 }}>
+            HigherUp&rsquo;s share covers the AI engine that optimizes every product in seconds —
+            the same work that would take you 43 hours by hand.
+          </p>
+          <p style={{ fontSize: 14, color: T.black, lineHeight: 1.7, margin: 0 }}>
+            The more clients you serve, the more you earn. There&rsquo;s no ceiling.
+          </p>
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div style={{ marginTop: 48, borderTop: `1px solid ${T.div}` }} />
+
+      {/* Tier table */}
+      <div style={{ marginTop: 48 }}>
+        <p style={label9}>HIGHERUP SHARE BY VOLUME</p>
+        <p style={{ marginTop: 6, fontSize: 12, color: '#DDDDDD' }}>Based on products per client per month</p>
+        <div style={{ marginTop: 16, maxWidth: 400 }}>
+          {[
+            { range: 'Up to 200 products', share: '$50/month'  },
+            { range: '201 — 400',           share: '$110/month' },
+            { range: '401 — 1,000',         share: '$220/month' },
+            { range: '1,000+',              share: '$350/month' },
+          ].map((row, i) => (
+            <div key={row.range} style={{
+              display: 'flex', justifyContent: 'space-between',
+              padding: '10px 0',
+              borderTop: i > 0 ? `1px solid ${T.div}` : undefined,
+            }}>
+              <span style={{ fontSize: 13, color: T.sec }}>{row.range}</span>
+              <span style={{ fontSize: 13, color: T.sec }}>{row.share}</span>
             </div>
-          </>
-        )}
-      </div>
-
-      <Divider />
-
-      {/* ── Calculator ─────────────────────────────────────────────────────── */}
-      <div>
-        <div style={{ fontSize: 10, color: T.ghost, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 20 }}>
-          ESTIMATE YOUR COSTS
+          ))}
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: T.black, flexWrap: 'wrap', marginBottom: 24 }}>
-          <span>If you have</span>
-          <input
-            type="text"
-            inputMode="numeric"
-            value={calcClients}
-            onChange={e => { const v = e.target.value; if (v === '' || /^\d+$/.test(v)) setCalcClients(v) }}
-            style={{ width: 60, fontSize: 13, textAlign: 'center', border: `1px solid ${T.border}`, borderRadius: 6, padding: '4px 8px', outline: 'none' }}
-          />
-          <span>clients averaging</span>
-          <input
-            type="text"
-            inputMode="numeric"
-            value={calcVariants}
-            onChange={e => { const v = e.target.value; if (v === '' || /^\d+$/.test(v)) setCalcVariants(v) }}
-            style={{ width: 80, fontSize: 13, textAlign: 'center', border: `1px solid ${T.border}`, borderRadius: 6, padding: '4px 8px', outline: 'none' }}
-          />
-          <span>products each</span>
-        </div>
-
-        {(() => {
-          const clientCount  = typeof calcClients  === 'string' ? (parseInt(calcClients)  || 0) : calcClients
-          const productCount = typeof calcVariants === 'string' ? (parseInt(calcVariants) || 0) : calcVariants
-          const tier  = getTierSync(tiers, productCount)
-          const total = tier.amount * clientCount
-          return (
-            <>
-              <div style={{ fontSize: 18, fontWeight: 500, color: T.black, marginBottom: 12 }}>
-                Your estimated HigherUp share: ${total.toLocaleString()}
-              </div>
-              <div style={{ fontSize: 13, color: T.gray }}>
-                {clientCount} client{clientCount !== 1 ? 's' : ''} × {tier.display_name} (${tier.amount}) = ${total.toLocaleString()}
-              </div>
-            </>
-          )
-        })()}
-      </div>
-
-      <Divider />
-
-      {/* ── FAQ ────────────────────────────────────────────────────────────── */}
-      <div>
-        <div style={{ fontSize: 10, color: T.ghost, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 20 }}>
-          COMMON QUESTIONS
-        </div>
-        {FAQ_ITEMS.map((item, i) => (
-          <div key={i} style={{ borderBottom: `1px solid ${T.border}` }}>
-            <button
-              onClick={() => setOpenFaq(openFaq === i ? null : i)}
-              style={{
-                width: '100%',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '14px 0',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                textAlign: 'left',
-                fontFamily: 'inherit',
-              }}
-            >
-              <span style={{ fontSize: 14, fontWeight: 500, color: T.black }}>{item.q}</span>
-              <span style={{
-                fontSize: 12,
-                color: T.ghost,
-                transform: openFaq === i ? 'rotate(180deg)' : 'none',
-                transition: 'transform 0.2s',
-                flexShrink: 0,
-              }}>▼</span>
-            </button>
-            {openFaq === i && (
-              <div style={{ fontSize: 13, color: T.gray, lineHeight: 1.6, paddingBottom: 16 }}>{item.a}</div>
-            )}
-          </div>
-        ))}
       </div>
 
     </div>
