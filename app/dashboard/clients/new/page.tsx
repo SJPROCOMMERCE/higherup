@@ -5,6 +5,7 @@
 // ALTER TABLE client_profiles ADD COLUMN IF NOT EXISTS custom_data JSONB;
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useVA } from '@/context/va-context'
@@ -223,8 +224,11 @@ function CustomDropdown({
 
   useEffect(() => {
     function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false); setFocused(false)
+      const target = e.target as Node
+      if (ref.current && !ref.current.contains(target)) {
+        const portals = document.querySelectorAll('[data-hu-dropdown-portal]')
+        const insidePortal = Array.from(portals).some(p => p.contains(target))
+        if (!insidePortal) { setOpen(false); setFocused(false) }
       }
     }
     document.addEventListener('mousedown', handler)
@@ -239,12 +243,25 @@ function CustomDropdown({
     return () => document.removeEventListener('keydown', handler)
   }, [])
 
+  const triggerRef = useRef<HTMLDivElement>(null)
+  const [rect, setRect]   = useState<DOMRect | null>(null)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => { setMounted(true) }, [])
+
+  function handleOpen() {
+    if (triggerRef.current) setRect(triggerRef.current.getBoundingClientRect())
+    setOpen(v => !v)
+    setFocused(true)
+  }
+
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    <div ref={ref}>
       <div
+        ref={triggerRef}
         tabIndex={0}
-        onClick={() => { setOpen(!open); setFocused(true) }}
-        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setOpen(!open) }}
+        onClick={handleOpen}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleOpen() }}
         style={{
           ...inputBase(hasError, open || focused),
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -255,21 +272,33 @@ function CustomDropdown({
         <span>{selected?.label ?? placeholder}</span>
         <span style={{ color: T.ter, fontSize: 9, marginLeft: 8 }}>{open ? '▲' : '▼'}</span>
       </div>
-      {open && (
-        <div className="hu-dropdown-list" style={{ top: '100%', left: 0, right: 0, maxHeight: 200, overflowY: 'auto', background: '#FFFFFF', backgroundColor: '#FFFFFF', borderRadius: 8, border: '1px solid #EEEEEE', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', zIndex: 9999 }}>
+      {open && rect && mounted && createPortal(
+        <div data-hu-dropdown-portal style={{
+          position: 'fixed',
+          top: rect.bottom + 4,
+          left: rect.left,
+          width: rect.width,
+          maxHeight: 200,
+          overflowY: 'auto',
+          background: '#FFFFFF',
+          border: '1px solid #EEEEEE',
+          borderRadius: 8,
+          boxShadow: '0 4px 20px rgba(0,0,0,0.10)',
+          zIndex: 99999,
+        }}>
           {options.map(o => (
             <div
               key={o.value}
-              className={`hu-dropdown-option${o.value === value ? ' is-selected' : ''}`}
               onClick={() => { onChange(o.value); setOpen(false); setFocused(false) }}
               onMouseEnter={e => (e.currentTarget.style.background = '#F5F5F7')}
               onMouseLeave={e => (e.currentTarget.style.background = o.value === value ? '#F5F5F7' : '#FFFFFF')}
-              style={{ padding: '10px 12px', fontSize: 14, fontWeight: o.value === value ? 500 : 400, color: T.black, background: o.value === value ? '#F5F5F7' : '#FFFFFF', cursor: 'pointer' }}
+              style={{ padding: '10px 14px', fontSize: 14, fontWeight: o.value === value ? 500 : 400, color: T.black, background: o.value === value ? '#F5F5F7' : '#FFFFFF', cursor: 'pointer' }}
             >
               {o.label}
             </div>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
@@ -296,8 +325,13 @@ function SearchableDropdown({
 
   useEffect(() => {
     function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false); setFocused(false); setQuery('')
+      const target = e.target as Node
+      // close if click is outside both the trigger ref AND the portal dropdown
+      if (ref.current && !ref.current.contains(target)) {
+        // check if click is inside the portal (by looking for the fixed dropdown)
+        const portals = document.querySelectorAll('[data-hu-dropdown-portal]')
+        const insidePortal = Array.from(portals).some(p => p.contains(target))
+        if (!insidePortal) { setOpen(false); setFocused(false); setQuery('') }
       }
     }
     document.addEventListener('mousedown', handler)
@@ -316,16 +350,24 @@ function SearchableDropdown({
     if (open) setTimeout(() => searchRef.current?.focus(), 10)
   }, [open])
 
+  const triggerRef2 = useRef<HTMLDivElement>(null)
+  const [rect2, setRect2]     = useState<DOMRect | null>(null)
+  const [mounted2, setMounted2] = useState(false)
+
+  useEffect(() => { setMounted2(true) }, [])
+
   function handleOpen() {
-    setOpen(!open)
+    if (triggerRef2.current) setRect2(triggerRef2.current.getBoundingClientRect())
+    setOpen(v => !v)
     setFocused(true)
     setQuery('')
   }
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    <div ref={ref}>
       {/* Trigger */}
       <div
+        ref={triggerRef2}
         tabIndex={0}
         onClick={handleOpen}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleOpen() }}
@@ -340,9 +382,19 @@ function SearchableDropdown({
         <span style={{ color: T.ter, fontSize: 9, marginLeft: 8 }}>{open ? '▲' : '▼'}</span>
       </div>
 
-      {/* Dropdown */}
-      {open && (
-        <div className="hu-dropdown-list" style={{ top: '100%', left: 0, right: 0, background: '#FFFFFF', backgroundColor: '#FFFFFF', borderRadius: 8, border: '1px solid #EEEEEE', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', zIndex: 9999 }}>
+      {/* Dropdown — rendered via portal at document.body to escape stacking contexts */}
+      {open && rect2 && mounted2 && createPortal(
+        <div data-hu-dropdown-portal style={{
+          position: 'fixed',
+          top: rect2.bottom + 4,
+          left: rect2.left,
+          width: rect2.width,
+          background: '#FFFFFF',
+          border: '1px solid #EEEEEE',
+          borderRadius: 8,
+          boxShadow: '0 4px 20px rgba(0,0,0,0.10)',
+          zIndex: 99999,
+        }}>
           {/* Search input */}
           <div style={{ padding: '8px 12px', borderBottom: `1px solid ${T.div}`, background: '#FFFFFF' }}>
             <input
@@ -351,33 +403,29 @@ function SearchableDropdown({
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search..."
-              style={{
-                width: '100%', fontSize: 13, color: T.black,
-                background: 'none', border: 'none', outline: 'none',
-                fontFamily: 'inherit',
-              }}
+              style={{ width: '100%', fontSize: 13, color: T.black, background: 'none', border: 'none', outline: 'none', fontFamily: 'inherit' }}
             />
           </div>
           {/* Options */}
           <div style={{ maxHeight: 200, overflowY: 'auto', background: '#FFFFFF' }}>
             {filtered.length === 0 ? (
-              <div style={{ padding: '10px 12px', fontSize: 13, color: T.ter, background: '#FFFFFF' }}>No results</div>
+              <div style={{ padding: '10px 14px', fontSize: 13, color: T.ter }}>No results</div>
             ) : (
               filtered.map(o => (
                 <div
                   key={o.value}
-                  className={`hu-dropdown-option${o.value === value ? ' is-selected' : ''}`}
                   onClick={() => { onChange(o.value); setOpen(false); setFocused(false); setQuery('') }}
                   onMouseEnter={e => (e.currentTarget.style.background = '#F5F5F7')}
                   onMouseLeave={e => (e.currentTarget.style.background = o.value === value ? '#F5F5F7' : '#FFFFFF')}
-                  style={{ padding: '10px 12px', fontSize: 14, fontWeight: o.value === value ? 500 : 400, color: T.black, background: o.value === value ? '#F5F5F7' : '#FFFFFF', cursor: 'pointer' }}
+                  style={{ padding: '10px 14px', fontSize: 14, fontWeight: o.value === value ? 500 : 400, color: T.black, background: o.value === value ? '#F5F5F7' : '#FFFFFF', cursor: 'pointer' }}
                 >
                   {o.label}
                 </div>
               ))
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
