@@ -493,13 +493,15 @@ function MoreDropdown({
         More ▾
       </button>
       {open && (
-        <div className="hu-dropdown-list" style={{ top: '110%', left: 0, minWidth: 160, background: '#FFFFFF', backgroundColor: '#FFFFFF' }}>
+        <div className="hu-dropdown-list" style={{ top: '110%', left: 0, minWidth: 160, background: '#FFFFFF', backgroundColor: '#FFFFFF', borderRadius: 8, border: '1px solid #EEEEEE', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', zIndex: 9999 }}>
           {clients.map(c => (
             <button
               key={c.id}
               className={`hu-dropdown-option${activeId === c.id ? ' is-selected' : ''}`}
               onClick={() => { onSelect(c.id); setOpen(false) }}
-              style={{ width: '100%', textAlign: 'left', padding: '9px 14px', fontSize: 13, color: T.black, border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'block' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#F5F5F7')}
+              onMouseLeave={e => (e.currentTarget.style.background = activeId === c.id ? '#F5F5F7' : '#FFFFFF')}
+              style={{ width: '100%', textAlign: 'left', padding: '9px 14px', fontSize: 13, color: T.black, border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'block', background: activeId === c.id ? '#F5F5F7' : '#FFFFFF' }}
             >
               {c.store_name}
             </button>

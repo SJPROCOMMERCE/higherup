@@ -184,17 +184,19 @@ function PromptDropdown({
         <span style={{ fontSize: 10, color: T.ter }}>▾</span>
       </button>
       {open && (
-        <div className="hu-dropdown-list" style={{ top: '100%', left: 0, right: 0, maxHeight: 200, overflowY: 'auto', background: '#FFFFFF', backgroundColor: '#FFFFFF' }}>
+        <div className="hu-dropdown-list" style={{ top: '100%', left: 0, right: 0, maxHeight: 200, overflowY: 'auto', background: '#FFFFFF', backgroundColor: '#FFFFFF', borderRadius: 8, border: '1px solid #EEEEEE', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', zIndex: 9999 }}>
           {prompts.map(p => (
             <button
               key={p.id}
               type="button"
               className={`hu-dropdown-option${value === p.id ? ' is-selected' : ''}`}
               onClick={() => { onChange(p.id); setOpen(false) }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#F5F5F7')}
+              onMouseLeave={e => (e.currentTarget.style.background = value === p.id ? '#F5F5F7' : '#FFFFFF')}
               style={{
                 width: '100%', textAlign: 'left', padding: '9px 14px',
                 fontSize: 13, color: T.black, border: 'none', cursor: 'pointer',
-                display: 'block', fontFamily: 'inherit',
+                display: 'block', fontFamily: 'inherit', background: value === p.id ? '#F5F5F7' : '#FFFFFF',
               }}
             >
               {p.name}

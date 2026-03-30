@@ -256,13 +256,15 @@ function CustomDropdown({
         <span style={{ color: T.ter, fontSize: 9, marginLeft: 8 }}>{open ? '▲' : '▼'}</span>
       </div>
       {open && (
-        <div className="hu-dropdown-list" style={{ top: '100%', left: 0, right: 0, maxHeight: 200, overflowY: 'auto', background: '#FFFFFF', backgroundColor: '#FFFFFF' }}>
+        <div className="hu-dropdown-list" style={{ top: '100%', left: 0, right: 0, maxHeight: 200, overflowY: 'auto', background: '#FFFFFF', backgroundColor: '#FFFFFF', borderRadius: 8, border: '1px solid #EEEEEE', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', zIndex: 9999 }}>
           {options.map(o => (
             <div
               key={o.value}
               className={`hu-dropdown-option${o.value === value ? ' is-selected' : ''}`}
               onClick={() => { onChange(o.value); setOpen(false); setFocused(false) }}
-              style={{ padding: '10px 12px', fontSize: 14, fontWeight: o.value === value ? 500 : 400, color: T.black }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#F5F5F7')}
+              onMouseLeave={e => (e.currentTarget.style.background = o.value === value ? '#F5F5F7' : '#FFFFFF')}
+              style={{ padding: '10px 12px', fontSize: 14, fontWeight: o.value === value ? 500 : 400, color: T.black, background: o.value === value ? '#F5F5F7' : '#FFFFFF', cursor: 'pointer' }}
             >
               {o.label}
             </div>
@@ -340,9 +342,9 @@ function SearchableDropdown({
 
       {/* Dropdown */}
       {open && (
-        <div className="hu-dropdown-list" style={{ top: '100%', left: 0, right: 0, background: '#FFFFFF', backgroundColor: '#FFFFFF' }}>
+        <div className="hu-dropdown-list" style={{ top: '100%', left: 0, right: 0, background: '#FFFFFF', backgroundColor: '#FFFFFF', borderRadius: 8, border: '1px solid #EEEEEE', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', zIndex: 9999 }}>
           {/* Search input */}
-          <div style={{ padding: '8px 12px', borderBottom: `1px solid ${T.div}` }}>
+          <div style={{ padding: '8px 12px', borderBottom: `1px solid ${T.div}`, background: '#FFFFFF' }}>
             <input
               ref={searchRef}
               type="text"
@@ -357,16 +359,18 @@ function SearchableDropdown({
             />
           </div>
           {/* Options */}
-          <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+          <div style={{ maxHeight: 200, overflowY: 'auto', background: '#FFFFFF' }}>
             {filtered.length === 0 ? (
-              <div style={{ padding: '10px 12px', fontSize: 13, color: T.ter }}>No results</div>
+              <div style={{ padding: '10px 12px', fontSize: 13, color: T.ter, background: '#FFFFFF' }}>No results</div>
             ) : (
               filtered.map(o => (
                 <div
                   key={o.value}
                   className={`hu-dropdown-option${o.value === value ? ' is-selected' : ''}`}
                   onClick={() => { onChange(o.value); setOpen(false); setFocused(false); setQuery('') }}
-                  style={{ padding: '10px 12px', fontSize: 14, fontWeight: o.value === value ? 500 : 400, color: T.black }}
+                  onMouseEnter={e => (e.currentTarget.style.background = '#F5F5F7')}
+                  onMouseLeave={e => (e.currentTarget.style.background = o.value === value ? '#F5F5F7' : '#FFFFFF')}
+                  style={{ padding: '10px 12px', fontSize: 14, fontWeight: o.value === value ? 500 : 400, color: T.black, background: o.value === value ? '#F5F5F7' : '#FFFFFF', cursor: 'pointer' }}
                 >
                   {o.label}
                 </div>

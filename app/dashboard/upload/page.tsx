@@ -299,14 +299,16 @@ function ClientDropdown({
         {!loading && <span style={{ fontSize: 10, color: T.ter }}>▾</span>}
       </button>
       {open && (
-        <div className="hu-dropdown-list" style={{ top: '100%', left: 0, right: 0, maxHeight: 240, overflowY: 'auto', background: '#FFFFFF', backgroundColor: '#FFFFFF' }}>
+        <div className="hu-dropdown-list" style={{ top: '100%', left: 0, right: 0, maxHeight: 240, overflowY: 'auto', background: '#FFFFFF', backgroundColor: '#FFFFFF', borderRadius: 8, border: '1px solid #EEEEEE', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', zIndex: 9999 }}>
           {options.length === 0
-            ? <div style={{ padding: '12px 14px', fontSize: 13, color: T.ter }}>No approved clients</div>
+            ? <div style={{ padding: '12px 14px', fontSize: 13, color: T.ter, background: '#FFFFFF' }}>No approved clients</div>
             : options.map(opt => (
               <button key={opt.value} type="button"
                 className={`hu-dropdown-option${value === opt.value ? ' is-selected' : ''}`}
                 onClick={() => { onChange(opt.value); setOpen(false) }}
-                style={{ width: '100%', textAlign: 'left', padding: '10px 14px', fontSize: 13, color: T.black, border: 'none', cursor: 'pointer', display: 'block', fontFamily: 'inherit' }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#F5F5F7')}
+                onMouseLeave={e => (e.currentTarget.style.background = value === opt.value ? '#F5F5F7' : '#FFFFFF')}
+                style={{ width: '100%', textAlign: 'left', padding: '10px 14px', fontSize: 13, color: T.black, border: 'none', cursor: 'pointer', display: 'block', fontFamily: 'inherit', background: value === opt.value ? '#F5F5F7' : '#FFFFFF' }}
               >{opt.label}</button>
             ))}
         </div>
