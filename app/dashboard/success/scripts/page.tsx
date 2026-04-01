@@ -11,6 +11,16 @@ export default function Scripts() {
       subtitle="Copy. Paste. Send. All ready to use."
     >
 
+      <div style={{ background: '#FFFBEB', borderRadius: 16, padding: 24, marginBottom: 40 }}>
+        <p style={{ fontSize: 14, color: '#92400E', margin: 0 }}>
+          Every script below is a starting point. Don't copy-paste it word for word.
+        </p>
+        <p style={{ marginTop: 8, fontSize: 13, color: '#B45309', margin: '8px 0 0' }}>
+          Change the wording. Add your own style. Clients can tell when something sounds robotic.
+          The best proposals feel personal — like you wrote it just for them.
+        </p>
+      </div>
+
       <CopyBlock
         title="A — UPWORK PROFILE TITLE"
         content="E-Commerce Product Listing Specialist | Shopify · Google Shopping · SEO Optimized Titles & Descriptions"
