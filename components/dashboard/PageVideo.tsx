@@ -31,6 +31,28 @@ function toEmbedUrl(url: string): string | null {
   return null
 }
 
+// ─── Shared wrapper ────────────────────────────────────────────────────────
+
+function VideoWrapper({ children, footer }: { children: React.ReactNode; footer: React.ReactNode }) {
+  return (
+    <div style={{ maxWidth: 720, width: '100%', margin: '0 auto 48px', textAlign: 'center' }}>
+      <p style={{ fontSize: 15, fontWeight: 500, color: '#111111', marginBottom: 16 }}>
+        Before you start, check this video!
+      </p>
+      <div style={{
+        position: 'relative',
+        width: '100%',
+        paddingBottom: '56.25%',
+        borderRadius: 16,
+        overflow: 'hidden',
+      }}>
+        {children}
+      </div>
+      {footer}
+    </div>
+  )
+}
+
 // ─── Component ────────────────────────────────────────────────────────────
 
 interface PageVideoData {
@@ -40,7 +62,8 @@ interface PageVideoData {
 }
 
 export function PageVideo({ slug }: { slug: string }) {
-  const [data, setData] = useState<PageVideoData | null>(null)
+  const [data,    setData]    = useState<PageVideoData | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     supabase
@@ -50,45 +73,69 @@ export function PageVideo({ slug }: { slug: string }) {
       .maybeSingle()
       .then(({ data: row }) => {
         if (row) setData(row as PageVideoData)
+        setLoading(false)
       })
   }, [slug])
 
-  if (!data || !data.is_active || !data.video_url.trim()) return null
+  // Loading skeleton
+  if (loading) {
+    return (
+      <div style={{ maxWidth: 720, width: '100%', margin: '0 auto 48px', textAlign: 'center' }}>
+        <div style={{ height: 20, width: 200, margin: '0 auto 16px', background: '#F5F5F5', borderRadius: 4 }} />
+        <div style={{
+          position: 'relative', width: '100%', paddingBottom: '56.25%',
+          borderRadius: 16, overflow: 'hidden', background: '#F5F5F5',
+        }} />
+        <div style={{ height: 12, width: 120, margin: '12px auto 0', background: '#F5F5F5', borderRadius: 4 }} />
+      </div>
+    )
+  }
 
-  const embedUrl = toEmbedUrl(data.video_url)
-  if (!embedUrl) return null
+  const hasVideo = data && data.is_active && data.video_url.trim()
+  const embedUrl = hasVideo ? toEmbedUrl(data.video_url) : null
 
-  const updatedDate = new Date(data.updated_at).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-  })
-
-  return (
-    <div style={{ maxWidth: 720, width: '100%', margin: '0 auto 48px', textAlign: 'center' }}>
-      {/* 16:9 iframe container */}
-      <div style={{
-        position: 'relative',
-        width: '100%',
-        paddingBottom: '56.25%',
-        borderRadius: 16,
-        overflow: 'hidden',
-        background: '#000000',
-      }}>
+  // Active video
+  if (hasVideo && embedUrl) {
+    const updatedDate = new Date(data.updated_at).toLocaleDateString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric',
+    })
+    return (
+      <VideoWrapper footer={
+        <p style={{ marginTop: 10, fontSize: 12, color: '#CCCCCC' }}>Last updated {updatedDate}</p>
+      }>
         <iframe
           src={embedUrl}
           frameBorder={0}
           allowFullScreen
           allow="autoplay; fullscreen; picture-in-picture"
-          style={{
-            position: 'absolute',
-            top: 0, left: 0,
-            width: '100%', height: '100%',
-            border: 'none',
-          }}
+          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none', background: '#000000' }}
         />
+      </VideoWrapper>
+    )
+  }
+
+  // Placeholder
+  return (
+    <VideoWrapper footer={
+      <p style={{ marginTop: 10, fontSize: 12, color: '#DDDDDD' }}>Last updated: —</p>
+    }>
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: '#FAFAFA',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <div style={{
+          width: 64, height: 64, borderRadius: '50%',
+          background: '#F0F0F0',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="#CCCCCC">
+            <polygon points="8,5 20,12 8,19" />
+          </svg>
+        </div>
+        <p style={{ marginTop: 16, fontSize: 16, fontWeight: 500, color: '#CCCCCC' }}>Coming Soon</p>
+        <p style={{ marginTop: 4, fontSize: 12, color: '#DDDDDD' }}>A tutorial video for this page is on its way.</p>
       </div>
-      <p style={{ marginTop: 10, fontSize: 12, color: '#CCCCCC' }}>
-        Last updated {updatedDate}
-      </p>
-    </div>
+    </VideoWrapper>
   )
 }
