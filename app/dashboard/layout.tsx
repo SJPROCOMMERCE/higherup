@@ -167,8 +167,6 @@ function Inner({ children }: { children: React.ReactNode }) {
 
         {/* Right */}
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12 }}>
-          <DarkModeToggle />
-          <LanguageToggle />
           {!navDisabled && <NotificationBell vaId={currentVA.id} />}
           <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{currentVA.name}</span>
           <button
