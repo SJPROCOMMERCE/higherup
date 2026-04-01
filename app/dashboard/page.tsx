@@ -9,6 +9,7 @@ import { getTiers, getTierSync, DEFAULT_TIERS, type Tier } from '@/lib/pricing'
 import { timeAgo, getMonthStart, formatMonthLabel, getMarketFlag } from '@/lib/utils'
 import { downloadOutput } from '@/lib/download'
 import { PageVideo } from '@/components/dashboard/PageVideo'
+import { Leaderboard } from '@/components/dashboard/Leaderboard'
 
 // ─── Design tokens (inline) ───────────────────────────────────────────────────
 
@@ -522,6 +523,8 @@ export default function DashboardPage() {
 
   return (
     <div style={{ paddingTop: 64, paddingBottom: 80, fontFamily: "'Inter', system-ui, sans-serif" }} className="content-pad">
+      <div className="dashboard-grid">
+      <div className="dashboard-main">
 
       {/* ── Greeting ────────────────────────────────────────── */}
       <div className="s1" style={{ ...C.outer, textAlign: 'center', marginBottom: 56 }}>
@@ -938,6 +941,13 @@ export default function DashboardPage() {
           onSuccess={() => { setModalClient(null); setSuccessMsg(true) }}
         />
       )}
+      </div>{/* end dashboard-main */}
+
+      {/* ── Leaderboard sidebar ─────────────────────────────── */}
+      <div className="dashboard-sidebar">
+        <Leaderboard vaId={currentVA.id} />
+      </div>
+      </div>{/* end dashboard-grid */}
     </div>
   )
 }
