@@ -941,13 +941,12 @@ export default function DashboardPage() {
           onSuccess={() => { setModalClient(null); setSuccessMsg(true) }}
         />
       )}
-      </div>{/* end dashboard-main */}
+      </div>
 
-      {/* ── Leaderboard sidebar ─────────────────────────────── */}
       <div className="dashboard-sidebar">
         <Leaderboard vaId={currentVA.id} />
       </div>
-      </div>{/* end dashboard-grid */}
+      </div>
     </div>
   )
 }

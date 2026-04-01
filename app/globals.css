@@ -1,12 +1,41 @@
 @import "tailwindcss";
 
+/* ─── CSS Variables — Light mode ──────────────────────────── */
+:root {
+  --bg-primary:    #FFFFFF;
+  --bg-secondary:  #FAFAFA;
+  --bg-tertiary:   #F5F5F5;
+  --border-color:  #F0F0F0;
+  --border-light:  #EEEEEE;
+  --text-primary:  #111111;
+  --text-secondary: #555555;
+  --text-tertiary: #999999;
+  --text-muted:    #CCCCCC;
+  --text-faded:    #BBBBBB;
+}
+
+/* ─── CSS Variables — Dark mode ───────────────────────────── */
+.dark {
+  --bg-primary:    #141414;
+  --bg-secondary:  #1C1C1C;
+  --bg-tertiary:   #242424;
+  --border-color:  #2C2C2C;
+  --border-light:  #2C2C2C;
+  --text-primary:  #F0F0F0;
+  --text-secondary: #BBBBBB;
+  --text-tertiary: #888888;
+  --text-muted:    #555555;
+  --text-faded:    #666666;
+}
+
 * { box-sizing: border-box; }
 
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background: #ffffff;
-  color: #111111;
+  background: var(--bg-primary);
+  color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 /* ─── Keyframes ───────────────────────────────────────────── */
@@ -119,4 +148,12 @@ body {
   .content-pad {
     padding-inline: 20px !important;
   }
+}
+
+/* ─── Quick Stats Widget — desktop only ───────────────────── */
+
+.quickstats-widget { display: flex; }
+
+@media (max-width: 1024px) {
+  .quickstats-widget { display: none !important; }
 }

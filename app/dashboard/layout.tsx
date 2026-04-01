@@ -7,24 +7,31 @@ import { useVA } from '@/context/va-context'
 import { supabase } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-log'
 import { NotificationBell } from '@/components/NotificationBell'
+import { DarkModeProvider, useDarkMode } from '@/components/DarkModeProvider'
+import { LanguageProvider, useLanguage } from '@/components/LanguageProvider'
+import { DarkModeToggle } from '@/components/dashboard/DarkModeToggle'
+import { LanguageToggle } from '@/components/dashboard/LanguageToggle'
+import { QuickStats } from '@/components/dashboard/QuickStats'
 
-const NAV = [
-  { label: 'Overview',   href: '/dashboard',            exact: true  },
-  { label: 'Upload',     href: '/dashboard/upload',     exact: false },
-  { label: 'Clients',    href: '/dashboard/clients',    exact: false },
-  { label: 'History',    href: '/dashboard/uploads',    exact: false },
-  { label: 'Messages',   href: '/dashboard/messages',   exact: false },
-  { label: 'Billing',    href: '/dashboard/billing',    exact: false },
-  { label: 'Affiliates', href: '/dashboard/affiliates', exact: false },
-  { label: 'Pricing',        href: '/dashboard/pricing',  exact: false },
-  { label: 'Success Center', href: '/dashboard/success', exact: false },
-  { label: 'Profile',   href: '/dashboard/profile',    exact: false },
-]
+const NAV_KEYS = [
+  { key: 'overview',      href: '/dashboard',            exact: true  },
+  { key: 'upload',        href: '/dashboard/upload',     exact: false },
+  { key: 'clients',       href: '/dashboard/clients',    exact: false },
+  { key: 'history',       href: '/dashboard/uploads',    exact: false },
+  { key: 'messages',      href: '/dashboard/messages',   exact: false },
+  { key: 'billing',       href: '/dashboard/billing',    exact: false },
+  { key: 'affiliates',    href: '/dashboard/affiliates', exact: false },
+  { key: 'pricing',       href: '/dashboard/pricing',    exact: false },
+  { key: 'successCenter', href: '/dashboard/success',    exact: false },
+  { key: 'profile',       href: '/dashboard/profile',    exact: false },
+] as const
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+function Inner({ children }: { children: React.ReactNode }) {
   const router   = useRouter()
   const pathname = usePathname()
   const { currentVA, logout, refreshVA } = useVA()
+  const { dark }  = useDarkMode()
+  const { tr }    = useLanguage()
   const [hydrated,  setHydrated]  = useState(false)
   const [menuOpen,  setMenuOpen]  = useState(false)
   const [msgCount,  setMsgCount]  = useState(0)
@@ -87,23 +94,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [hydrated, currentVA, pathname, router])
 
-  if (!hydrated || !currentVA) return <div style={{ minHeight: '100vh', background: '#fff' }} />
+  if (!hydrated || !currentVA) return <div style={{ minHeight: '100vh', background: 'var(--bg-primary)' }} />
 
   const isWaitlist  = pathname === '/dashboard/waitlist'
   const isBlocked   = pathname === '/dashboard/blocked'
   const navDisabled = isWaitlist || isBlocked
 
-  function isActive(item: typeof NAV[0]) {
-    return item.exact ? pathname === item.href : pathname.startsWith(item.href)
+  function isActive(href: string, exact: boolean) {
+    return exact ? pathname === href : pathname.startsWith(href)
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#FFFFFF', fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
+    <div style={{ minHeight: '100vh', background: 'var(--bg-primary)', fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
 
       {/* ─── Top Nav ──────────────────────────────────────────── */}
       <header style={{
         position: 'sticky', top: 0, zIndex: 30, height: 52,
-        background: '#FFFFFF', borderBottom: '1px solid #F0F0F0',
+        background: 'var(--bg-primary)', borderBottom: '1px solid var(--border-color)',
         display: 'flex', alignItems: 'stretch',
         paddingLeft: 64, paddingRight: 64,
       }}>
@@ -115,9 +122,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Center nav — desktop only */}
         <nav className="nav-desktop" style={{ alignItems: 'stretch', gap: 32 }}>
-          {NAV.map((item) => {
-            const active   = isActive(item)
-            const disabled = navDisabled
+          {NAV_KEYS.map((item) => {
+            const active = isActive(item.href, item.exact)
+            const label  = tr.nav[item.key as keyof typeof tr.nav] ?? item.key
 
             if (navDisabled) {
               return (
@@ -125,11 +132,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   key={item.href}
                   style={{
                     display: 'flex', alignItems: 'center', height: '100%',
-                    fontSize: 13, color: '#DDDDDD',
+                    fontSize: 13, color: 'var(--text-muted)',
                     borderBottom: '1.5px solid transparent',
                   }}
                 >
-                  {item.label}
+                  {label}
                 </span>
               )
             }
@@ -141,17 +148,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 style={{
                   display: 'flex', alignItems: 'center', height: '100%',
                   fontSize: 13, fontWeight: active ? 500 : 400,
-                  color: active ? '#111111' : '#BBBBBB',
+                  color: active ? 'var(--text-primary)' : 'var(--text-faded)',
                   textDecoration: 'none',
-                  borderBottom: active ? '1.5px solid #111111' : '1.5px solid transparent',
+                  borderBottom: active ? '1.5px solid var(--text-primary)' : '1.5px solid transparent',
                   transition: 'color 0.15s',
                 }}
-                onMouseEnter={e => { if (!active) e.currentTarget.style.color = '#111111' }}
-                onMouseLeave={e => { if (!active) e.currentTarget.style.color = '#BBBBBB' }}
+                onMouseEnter={e => { if (!active) e.currentTarget.style.color = 'var(--text-primary)' }}
+                onMouseLeave={e => { if (!active) e.currentTarget.style.color = 'var(--text-faded)' }}
               >
-                {item.label}
+                {label}
                 {item.href === '/dashboard/messages' && msgCount > 0 && (
-                  <span style={{ fontSize: 11, fontWeight: 500, color: '#111111', marginLeft: 4 }}>({msgCount})</span>
+                  <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-primary)', marginLeft: 4 }}>({msgCount})</span>
                 )}
               </Link>
             )
@@ -159,9 +166,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </nav>
 
         {/* Right */}
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16 }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12 }}>
+          <DarkModeToggle />
+          <LanguageToggle />
           {!navDisabled && <NotificationBell vaId={currentVA.id} />}
-          <span style={{ fontSize: 12, color: '#999999' }}>{currentVA.name}</span>
+          <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{currentVA.name}</span>
           <button
             onClick={() => {
               if (currentVA) {
@@ -175,11 +184,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               logout()
               router.push('/')
             }}
-            style={{ fontSize: 11, color: '#CCCCCC', background: 'none', border: 'none', cursor: 'pointer', padding: 0, transition: 'color 0.15s' }}
-            onMouseEnter={e => e.currentTarget.style.color = '#111111'}
-            onMouseLeave={e => e.currentTarget.style.color = '#CCCCCC'}
+            style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, transition: 'color 0.15s' }}
+            onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
           >
-            Log out
+            {tr.nav.logOut}
           </button>
 
           <button
@@ -188,18 +197,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             style={{ flexDirection: 'column', gap: 4, background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}
             aria-label="Menu"
           >
-            <span style={{ display: 'block', width: 16, height: 1, background: '#111111' }} />
-            <span style={{ display: 'block', width: 16, height: 1, background: '#111111' }} />
-            <span style={{ display: 'block', width: 16, height: 1, background: '#111111' }} />
+            <span style={{ display: 'block', width: 16, height: 1, background: 'var(--text-primary)' }} />
+            <span style={{ display: 'block', width: 16, height: 1, background: 'var(--text-primary)' }} />
+            <span style={{ display: 'block', width: 16, height: 1, background: 'var(--text-primary)' }} />
           </button>
         </div>
       </header>
 
       {/* Mobile menu */}
       {menuOpen && (
-        <div style={{ background: '#FFFFFF', borderBottom: '1px solid #F0F0F0', padding: '8px 24px 16px' }}>
-          {NAV.map((item) => {
-            const active = isActive(item)
+        <div style={{ background: 'var(--bg-primary)', borderBottom: '1px solid var(--border-color)', padding: '8px 24px 16px' }}>
+          {NAV_KEYS.map((item) => {
+            const active = isActive(item.href, item.exact)
+            const label  = tr.nav[item.key as keyof typeof tr.nav] ?? item.key
             return (
               <Link
                 key={item.href}
@@ -208,13 +218,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 style={{
                   display: 'block', padding: '10px 0',
                   fontSize: 14, fontWeight: active ? 500 : 400,
-                  color: navDisabled ? '#DDDDDD' : active ? '#111111' : '#BBBBBB',
+                  color: navDisabled ? 'var(--text-muted)' : active ? 'var(--text-primary)' : 'var(--text-faded)',
                   textDecoration: 'none',
-                  borderBottom: '1px solid #F5F5F5',
+                  borderBottom: '1px solid var(--border-color)',
                   pointerEvents: navDisabled ? 'none' : 'auto',
                 }}
               >
-                {item.label}
+                {label}
               </Link>
             )
           })}
@@ -222,6 +232,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       )}
 
       <main>{children}</main>
+
+      {/* Floating quick stats widget */}
+      {!navDisabled && <QuickStats vaId={currentVA.id} />}
     </div>
+  )
+}
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const { currentVA } = useVA()
+  return (
+    <DarkModeProvider>
+      <LanguageProvider vaId={currentVA?.id}>
+        <Inner>{children}</Inner>
+      </LanguageProvider>
+    </DarkModeProvider>
   )
 }
