@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { useVA } from '@/context/va-context'
 import { supabase } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-log'
+import { PageVideo } from '@/components/dashboard/PageVideo'
 
 const T = {
   black: '#111111', sec: '#555555', ter: '#999999',
@@ -192,6 +193,8 @@ export default function ProfilePage() {
 
       <div style={{ fontSize: 28, fontWeight: 300, color: T.black, marginBottom: 8 }}>Profile</div>
       <div style={{ fontSize: 13, color: T.ghost, marginBottom: 48 }}>Your account details and payment setup.</div>
+
+      <PageVideo slug="profile" />
 
       {/* ── Identity ────────────────────────────────────────────────────────── */}
       <Section title="Identity">

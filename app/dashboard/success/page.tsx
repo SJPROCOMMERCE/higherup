@@ -1,12 +1,17 @@
 'use client'
 
 import { useVA } from '@/context/va-context'
+import { PageVideo } from '@/components/dashboard/PageVideo'
 
 export default function SuccessCenter() {
   const { currentVA } = useVA()
   const firstName = currentVA?.name?.split(' ')[0] || ''
 
   return (
+    <>
+    <div style={{ maxWidth: 720, margin: '0 auto', padding: '56px 24px 0' }}>
+      <PageVideo slug="success" />
+    </div>
     <div style={{
       minHeight: '80vh',
       display: 'flex',
@@ -52,5 +57,6 @@ export default function SuccessCenter() {
 
       </div>
     </div>
+    </>
   )
 }

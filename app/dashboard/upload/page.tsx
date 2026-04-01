@@ -11,6 +11,7 @@ import { getMonthStart } from '@/lib/utils'
 import dynamic from 'next/dynamic'
 import { downloadOutput } from '@/lib/download'
 import { TemplateSelector, type TemplateInfo, type TemplateSelectorData } from '@/components/dashboard/TemplateSelector'
+import { PageVideo } from '@/components/dashboard/PageVideo'
 
 // ManualEntry is only shown when the user explicitly clicks "enter manually"
 // — load it lazily so it never bloats the initial page compile
@@ -1244,6 +1245,8 @@ function UploadForm() {
         <div style={{ fontSize: 22, fontWeight: 600, color: T.black }}>Upload</div>
         <div style={{ fontSize: 13, color: T.ter, marginTop: 4 }}>CSV, XLSX, or Google Sheets · max 10 MB</div>
       </div>
+
+      <PageVideo slug="upload" />
 
       {/* Client */}
       <div style={{ marginBottom: 40 }} className="s2">

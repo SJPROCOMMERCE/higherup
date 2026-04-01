@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { PageVideo } from '@/components/dashboard/PageVideo'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
@@ -129,6 +130,8 @@ export default function PricingPage() {
       {/* Header */}
       <h1 style={{ fontSize: 28, fontWeight: 300, color: T.black, margin: 0 }}>Your earnings</h1>
       <p style={{ marginTop: 8, fontSize: 14, color: T.ghost }}>See exactly what you take home.</p>
+
+      <PageVideo slug="pricing" />
 
       {/* Inputs */}
       <div style={{ marginTop: 48, display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 32 }}>

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useVA } from '@/context/va-context'
 import { supabase } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-log'
+import { PageVideo } from '@/components/dashboard/PageVideo'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -372,6 +373,8 @@ export default function AffiliatesPage() {
       maxWidth: 860, margin: '0 auto', paddingInline: 48,
       fontFamily: "'Inter', system-ui, sans-serif",
     }}>
+
+      <PageVideo slug="affiliates" />
 
       {/* ─── Header ──────────────────────────────────────────────────────── */}
       <div style={{ marginBottom: 48 }}>

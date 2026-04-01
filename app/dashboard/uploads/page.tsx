@@ -6,6 +6,7 @@ import { useVA } from '@/context/va-context'
 import { supabase, type Client, type Upload } from '@/lib/supabase'
 import { getTiers, getTierSync, DEFAULT_TIERS, type Tier } from '@/lib/pricing'
 import { downloadOutput, downloadInput } from '@/lib/download'
+import { PageVideo } from '@/components/dashboard/PageVideo'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
@@ -622,6 +623,8 @@ export default function UploadsPage() {
           All your processed listings in one place.
         </p>
       </div>
+
+      <PageVideo slug="uploads" />
 
       {/* ── Filters ───────────────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 24, flexWrap: 'wrap', marginBottom: 32 }} className="s2">

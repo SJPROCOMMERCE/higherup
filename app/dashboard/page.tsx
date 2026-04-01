@@ -8,6 +8,7 @@ import { supabase, type Client, type Upload, type Billing, type Affiliate, type 
 import { getTiers, getTierSync, DEFAULT_TIERS, type Tier } from '@/lib/pricing'
 import { timeAgo, getMonthStart, formatMonthLabel, getMarketFlag } from '@/lib/utils'
 import { downloadOutput } from '@/lib/download'
+import { PageVideo } from '@/components/dashboard/PageVideo'
 
 // ─── Design tokens (inline) ───────────────────────────────────────────────────
 
@@ -532,6 +533,8 @@ export default function DashboardPage() {
           {getDateLabel()}
         </p>
       </div>
+
+      <PageVideo slug="dashboard" />
 
       {/* ── On-hold with admin messages (prominent) ─────────── */}
       {onHoldMessages.length > 0 && (

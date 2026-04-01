@@ -6,6 +6,7 @@ import { useVA } from '@/context/va-context'
 import { supabase } from '@/lib/supabase'
 import type { Billing, BillingLineItem } from '@/lib/supabase'
 import { getTiers, getTierSync, DEFAULT_TIERS, type Tier } from '@/lib/pricing'
+import { PageVideo } from '@/components/dashboard/PageVideo'
 import { HIGHERUP_PAYMENT, getWisePaymentLink } from '@/lib/payment-config'
 import { Copy, Check } from 'lucide-react'
 
@@ -500,10 +501,14 @@ export default function BillingPage() {
         }
       `}</style>
 
+      <div style={{ maxWidth: 960, margin: '0 auto', paddingInline: 48, paddingTop: 56 }}>
+        <PageVideo slug="billing" />
+      </div>
+
       <div
         className="billing-layout"
         style={{
-          paddingTop: 56, paddingBottom: 100, maxWidth: 960,
+          paddingTop: 0, paddingBottom: 100, maxWidth: 960,
           margin: '0 auto', paddingInline: 48,
           display: 'flex', gap: 48, alignItems: 'flex-start',
         }}

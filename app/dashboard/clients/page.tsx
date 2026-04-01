@@ -10,6 +10,7 @@ import { timeAgo, getMarketFlag } from '@/lib/utils'
 import { downloadOutput } from '@/lib/download'
 import { logActivity } from '@/lib/activity-log'
 import { OptimizationStatus } from '@/components/dashboard/OptimizationStatus'
+import { PageVideo } from '@/components/dashboard/PageVideo'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
@@ -1104,6 +1105,8 @@ export default function ClientsPage() {
           + New client
         </Link>
       </div>
+
+      <PageVideo slug="clients" />
 
       {/* ── Search + Sort ────────────────────────────────────────────── */}
       {clients.length > 0 && (

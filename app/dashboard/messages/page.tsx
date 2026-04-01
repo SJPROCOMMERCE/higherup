@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useVA } from '@/context/va-context'
 import { supabase } from '@/lib/supabase'
+import { PageVideo } from '@/components/dashboard/PageVideo'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const T = {
@@ -207,6 +208,8 @@ export default function MessagesPage() {
       >
         Messages
       </h1>
+
+      <PageVideo slug="messages" />
 
       {/* Subtitle */}
       {!loading && (
