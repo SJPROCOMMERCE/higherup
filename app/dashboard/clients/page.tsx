@@ -218,6 +218,7 @@ function ClientRow({
   const [titlePref,          setTitlePref]          = useState<string | null>(client.title_preference ?? null)
   const [descStyle,          setDescStyle]          = useState<string | null>(client.description_style ?? null)
   const [savingPref,         setSavingPref]         = useState(false)
+  const [prefSaved,          setPrefSaved]          = useState(false)
   const [standingInstr,      setStandingInstr]      = useState(client.special_instructions ?? '')
   const [savingStanding,     setSavingStanding]     = useState(false)
   const [standingSaved,      setStandingSaved]      = useState(false)
@@ -341,11 +342,28 @@ function ClientRow({
   }
 
   async function savePref(field: 'title_preference' | 'description_style', value: string) {
-    setSavingPref(true)
-    await supabase.from('clients').update({ [field]: value }).eq('id', client.id)
+    // Optimistic update — show selection instantly
+    const prevTitle = titlePref
+    const prevDesc  = descStyle
     if (field === 'title_preference') setTitlePref(value)
     else setDescStyle(value)
+
+    setSavingPref(true)
+    const { error } = await supabase.from('clients').update({ [field]: value }).eq('id', client.id)
     setSavingPref(false)
+
+    if (error) {
+      // Revert on failure
+      setTitlePref(prevTitle)
+      setDescStyle(prevDesc)
+      console.error('savePref failed:', error.message)
+      return
+    }
+
+    // Brief "Saved ✓" confirmation
+    setPrefSaved(true)
+    setTimeout(() => setPrefSaved(false), 2000)
+
     void logActivity({
       action: 'client_preference_updated',
       va_id: client.va_id,
@@ -588,6 +606,11 @@ function ClientRow({
                   ))}
                 </div>
               </div>
+
+              {/* Pref saved indicator */}
+              {prefSaved && (
+                <div style={{ fontSize: 11, color: '#10B981', paddingBlock: 4 }}>Saved ✓</div>
+              )}
 
               {/* VA Rate per product */}
               <div style={{ display: 'flex', alignItems: 'center', paddingBlock: 7, borderBottom: '1px solid #F5F5F5' }}>
