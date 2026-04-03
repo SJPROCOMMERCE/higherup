@@ -7,6 +7,7 @@ import { applyPricingToRow } from '@/lib/product-pricing'
 import type { ProductPricingRules } from '@/lib/product-pricing'
 import { OPTION_ALIASES, slugify as skuSlugify, buildSKU } from '@/lib/sku-builder'
 import type { SkuProduct } from '@/lib/sku-builder'
+import { normalizeOptionNames } from '@/lib/csv-normalizer'
 
 // ─── Vercel max function duration ─────────────────────────────────────────────
 export const maxDuration = 300
@@ -584,7 +585,11 @@ export async function runPipeline(uploadId: string): Promise<void> {
   if (!allRows.length) throw new Error('No data rows found in file')
 
   const headers      = Object.keys(allRows[0])
-  const variantRows  = allRows  // all rows = variants
+  // ── Shopify Option Name inheritance fix ──────────────────────────────────
+  // Shopify CSV puts Option Name only on the first (parent) row of each product.
+  // All variant rows 2-N have empty Option Name → SKU builder misses size/color.
+  // normalizeOptionNames() inherits the name downward in a single forward pass.
+  const variantRows  = normalizeOptionNames(allRows, headers)
 
   // 8. Apply column mapping + resolve output_columns
   // output_columns is now its own JSONB column; fall back to __output_columns in column_mapping for old uploads
@@ -1123,7 +1128,45 @@ export async function runPipeline(uploadId: string): Promise<void> {
     return out
   })
 
-  // 13b. Apply client-level pricing rules (if configured)
+  // 13b. Emergency SKU fallback ──────────────────────────────────────────────
+  // Safety net: if any row still has an empty SKU column after the main loop,
+  // attempt a final rebuild using whatever option data is available in that row.
+  if (clientSkuStructure && skuCsvCol) {
+    let emergencyFixed = 0
+    for (let i = 0; i < outputRows.length; i++) {
+      const out = outputRows[i]
+      const currentSku = String(out[skuCsvCol] ?? '').trim()
+      // Only attempt rebuild if SKU column is empty
+      if (currentSku) continue
+
+      const result = results[i]
+      if (!result) continue  // no Claude result → nothing to build from
+
+      const ep: SkuProduct = {
+        title:  result.title,
+        vendor: String(out['Vendor'] ?? '').trim(),
+        type:   String(out['Product Type'] ?? '').trim(),
+      }
+      for (let oi = 1; oi <= 3; oi++) {
+        const nc = headers.find(h => h.toLowerCase() === `option${oi} name`)
+        const vc = headers.find(h => h.toLowerCase() === `option${oi} value`)
+        ;(ep as Record<string, string>)[`option${oi}_name`]  = nc ? String(out[nc] ?? '').trim() : ''
+        ;(ep as Record<string, string>)[`option${oi}_value`] = vc ? String(out[vc] ?? '').trim() : ''
+      }
+      const newSku = buildSKU(clientSkuStructure, ep)
+      if (newSku) {
+        out[skuCsvCol] = newSku
+        outputRows[i]  = out
+        emergencyFixed++
+        console.log(`[SKU] emergency | row ${i} | ${ep.option1_value ?? ''}/${(ep as Record<string, string>)['option2_value'] ?? ''} → "${newSku}"`)
+      }
+    }
+    if (emergencyFixed > 0) {
+      console.log(`[SKU] emergency fallback rebuilt ${emergencyFixed} empty SKUs`)
+    }
+  }
+
+  // 13c. Apply client-level pricing rules (if configured)
   if (priceCol) {
     const { data: pricingProfile } = await supabase
       .from('client_profiles')

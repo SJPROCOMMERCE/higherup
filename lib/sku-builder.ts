@@ -16,16 +16,66 @@
  * - validateAndFixSKUs() post-processes a batch after parsing Claude's output.
  */
 
+// ─── Strip diacritics ─────────────────────────────────────────────────────────
+//
+// Converts accented characters to their ASCII base so SKU slugs stay clean
+// across multiple languages (é→e, ü→u, ñ→n, etc.)
+
+export function stripDiacritics(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+}
+
 // ─── Slug helper ──────────────────────────────────────────────────────────────
 
 export function slugify(s: string): string {
-  return s
+  return stripDiacritics(s)
     .toLowerCase()
     .trim()
     .replace(/[\s_]+/g, '-')
-    .replace(/[^a-z0-9\-àáâãäåèéêëìíîïòóôõöùúûüýÿñçßæøœ]/g, '')
+    .replace(/[^a-z0-9\-]/g, '')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
+}
+
+// ─── Title slug ───────────────────────────────────────────────────────────────
+//
+// Produces a short, meaningful slug from a product title for use in SKUs.
+// Rules:
+//   - Strip stop words (articles, prepositions, conjunctions)
+//   - Keep at most maxWords meaningful words
+//   - Trim to maxChars characters (cutting at last complete word)
+//
+// Examples:
+//   "Blue Cotton Long-Sleeve Shirt for Women" → "blue-cotton-long-sleeve" (4 words)
+//   "A Beautiful Sheer Long Sleeve Evening Gown" → "beautiful-sheer-long-sleeve" (4 words)
+
+const STOP_WORDS = new Set([
+  'a', 'an', 'the', 'and', 'or', 'but', 'for', 'nor', 'so', 'yet',
+  'at', 'by', 'from', 'in', 'of', 'on', 'to', 'up', 'as', 'into',
+  'with', 'about', 'above', 'after', 'before', 'between', 'through',
+  'is', 'are', 'was', 'were', 'be', 'been', 'being',
+  'this', 'that', 'these', 'those',
+  'its', 'it', 'your', 'our',
+])
+
+export function slugifyTitle(
+  title: string,
+  maxWords = 4,
+  maxChars = 30,
+): string {
+  const rawSlug = slugify(title)
+  const words   = rawSlug.split('-').filter(w => w.length > 0)
+  const filtered = words.filter(w => !STOP_WORDS.has(w))
+  const selected = filtered.slice(0, maxWords)
+  let result = selected.join('-')
+
+  if (result.length > maxChars) {
+    result = result.slice(0, maxChars)
+    const lastHyphen = result.lastIndexOf('-')
+    if (lastHyphen > 0) result = result.slice(0, lastHyphen)
+  }
+
+  return result || rawSlug.slice(0, maxChars)
 }
 
 // ─── Option aliases ────────────────────────────────────────────────────────────
@@ -165,9 +215,13 @@ export function buildSKU(structure: string, product: SkuProduct): string {
     let value = ''
 
     switch (comp) {
-      case 'title':
-        value = product.title ?? ''
-        break
+      case 'title': {
+        // Use slugifyTitle: max 4 meaningful words, max 30 chars
+        // This prevents 63-char title slugs like "formal-sheer-long-sleeve-eveni..."
+        const titleSlug = slugifyTitle(product.title ?? '')
+        if (titleSlug) parts.push(titleSlug)
+        continue
+      }
       case 'brand':
       case 'vendor':
         value = product.vendor ?? ''
