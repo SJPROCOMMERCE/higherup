@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 
 export default function GenxLoginPage() {
   const [code, setCode]       = useState('')
@@ -37,11 +38,8 @@ export default function GenxLoginPage() {
     }}>
       <div style={{ width: 320 }}>
         <div style={{ marginBottom: 48 }}>
-          <div style={{
-            fontSize: 18, fontWeight: 700, color: '#FFFFFF',
-            letterSpacing: '0.12em', marginBottom: 8,
-          }}>GENX</div>
-          <div style={{ fontSize: 12, color: '#555555', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <Image src="/genxlogo.png" alt="GENX" height={32} width={100} style={{ objectFit: 'contain' }} priority />
+          <div style={{ fontSize: 12, color: '#555555', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 8 }}>
             Lead Generator Portal
           </div>
         </div>

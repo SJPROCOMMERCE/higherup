@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 
 const ITEMS = [
@@ -33,9 +34,7 @@ export default function GenxNav({ displayName, lgId }: { displayName: string; lg
           maxWidth: 1200, margin: '0 auto', padding: '0 24px',
           height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
-          <span style={{ fontWeight: 700, color: '#FFFFFF', letterSpacing: '0.12em', fontSize: 15 }}>
-            GENX
-          </span>
+          <Image src="/genxlogo.png" alt="GENX" height={28} width={80} style={{ objectFit: 'contain' }} priority />
 
           <div style={{ display: 'flex', gap: 32 }} className="genx-desktop-nav">
             {ITEMS.map(item => {
