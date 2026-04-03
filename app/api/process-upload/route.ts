@@ -255,15 +255,112 @@ function parseVariantOptions(
   }
 }
 
+// ─── Language detection ───────────────────────────────────────────────────────
+//
+// Lightweight heuristic: flags output items that appear to still be in English
+// when a non-English target language was requested.
+
+const ENGLISH_MARKERS = new Set([
+  'the', 'and', 'for', 'with', 'this', 'that', 'from', 'are', 'was',
+  'our', 'your', 'you', 'can', 'its', 'has', 'have', 'been', 'will',
+  'made', 'features', 'perfect', 'designed', 'high', 'quality',
+  'color', 'colour', 'size', 'material', 'style', 'small', 'medium',
+  'large', 'extra', 'red', 'blue', 'green', 'black', 'white', 'yellow',
+  'pink', 'orange', 'purple', 'brown', 'grey', 'gray',
+])
+
+// A few reliable markers per language — just enough to confirm we're NOT in English
+const LANG_MARKERS: Record<string, string[]> = {
+  dutch:      ['de', 'het', 'een', 'van', 'voor', 'met', 'niet', 'ook', 'zijn', 'worden'],
+  nl:         ['de', 'het', 'een', 'van', 'voor', 'met', 'niet', 'ook', 'zijn', 'worden'],
+  german:     ['der', 'die', 'das', 'und', 'für', 'mit', 'nicht', 'werden', 'auch', 'mehr'],
+  de:         ['der', 'die', 'das', 'und', 'für', 'mit', 'nicht', 'werden', 'auch', 'mehr'],
+  french:     ['le', 'la', 'les', 'des', 'pour', 'avec', 'cette', 'sont', 'mais', 'plus'],
+  fr:         ['le', 'la', 'les', 'des', 'pour', 'avec', 'cette', 'sont', 'mais', 'plus'],
+  spanish:    ['el', 'la', 'los', 'las', 'para', 'con', 'esta', 'pero', 'también', 'más'],
+  es:         ['el', 'la', 'los', 'las', 'para', 'con', 'esta', 'pero', 'también', 'más'],
+  italian:    ['il', 'la', 'per', 'con', 'questa', 'sono', 'anche', 'più', 'una', 'del'],
+  it:         ['il', 'la', 'per', 'con', 'questa', 'sono', 'anche', 'più', 'una', 'del'],
+  portuguese: ['para', 'com', 'esta', 'são', 'mas', 'também', 'mais', 'uma', 'por', 'dos'],
+  pt:         ['para', 'com', 'esta', 'são', 'mas', 'também', 'mais', 'uma', 'por', 'dos'],
+  polish:     ['dla', 'jest', 'nie', 'jak', 'tego', 'oraz', 'przez', 'tylko', 'jako'],
+  pl:         ['dla', 'jest', 'nie', 'jak', 'tego', 'oraz', 'przez', 'tylko', 'jako'],
+  swedish:    ['och', 'att', 'det', 'för', 'med', 'den', 'inte', 'har', 'från', 'som'],
+  sv:         ['och', 'att', 'det', 'för', 'med', 'den', 'inte', 'har', 'från', 'som'],
+  indonesian: ['yang', 'dan', 'untuk', 'dengan', 'ini', 'dari', 'tidak', 'juga', 'lebih'],
+  id:         ['yang', 'dan', 'untuk', 'dengan', 'ini', 'dari', 'tidak', 'juga', 'lebih'],
+  filipino:   ['ang', 'mga', 'na', 'sa', 'ng', 'para', 'ito', 'at', 'ay'],
+  fil:        ['ang', 'mga', 'na', 'sa', 'ng', 'para', 'ito', 'at', 'ay'],
+}
+
+const ENGLISH_OPT_NAMES   = new Set(['color', 'colour', 'size', 'material', 'style', 'pattern', 'length', 'width', 'weight', 'finish'])
+const ENGLISH_OPT_VALUES  = new Set(['red', 'blue', 'green', 'black', 'white', 'yellow', 'pink', 'orange', 'purple', 'brown', 'grey', 'gray', 'small', 'medium', 'large', 'extra large', 'x-large', 'xl', 'xxl'])
+
+interface LangIssue { product: number; field: string; issue: string }
+
+function detectLanguageIssues(
+  products: Array<{ title?: string; description?: string; option_translations?: OptionTranslation[] }>,
+  targetLanguage: string,
+): LangIssue[] {
+  const lang = targetLanguage.toLowerCase()
+  if (!lang || lang === 'en' || lang === 'english') return []
+
+  const targetMarkers = LANG_MARKERS[lang] ?? []
+  const issues: LangIssue[] = []
+
+  products.forEach((product, i) => {
+    const n = i + 1
+
+    // Title check
+    if (product.title) {
+      const words = product.title.toLowerCase().split(/\s+/)
+      const engCount    = words.filter(w => ENGLISH_MARKERS.has(w)).length
+      const targetCount = words.filter(w => targetMarkers.includes(w)).length
+      if (engCount >= 3 && targetCount === 0) {
+        issues.push({ product: n, field: 'title', issue: `Likely English: "${product.title.slice(0, 60)}"` })
+      }
+    }
+
+    // Description check (strip HTML)
+    if (product.description) {
+      const clean = product.description.replace(/<[^>]*>/g, ' ').toLowerCase()
+      const words = clean.split(/\s+/).filter(w => w.length > 2)
+      const engCount    = words.filter(w => ENGLISH_MARKERS.has(w)).length
+      const targetCount = words.filter(w => targetMarkers.includes(w)).length
+      if (engCount >= 5 && targetCount < 2) {
+        issues.push({ product: n, field: 'description', issue: `Likely English (${engCount} EN markers, ${targetCount} ${lang} markers)` })
+      }
+    }
+
+    // Option translations check
+    if (product.option_translations && product.option_translations.length > 0) {
+      for (const trans of product.option_translations) {
+        if (ENGLISH_OPT_NAMES.has(trans.translatedName?.toLowerCase())) {
+          issues.push({ product: n, field: 'option_name', issue: `"${trans.name}" translated to "${trans.translatedName}" — still English` })
+        }
+        for (const v of trans.values ?? []) {
+          if (ENGLISH_OPT_VALUES.has(v.translated?.toLowerCase())) {
+            issues.push({ product: n, field: 'option_value', issue: `"${v.original}" translated to "${v.translated}" — still English` })
+          }
+        }
+      }
+    }
+  })
+
+  return issues
+}
+
 // ─── Batch message builder ────────────────────────────────────────────────────
 
 function buildBatchMessage(
-  batch:          ProductRow[],
-  imageEnabled:   boolean,
-  outputColumns:  string[],
-  hasPriceRule:   boolean,
-  hasSkuRule:     boolean,
-  anchorText?:    string,
+  batch:             ProductRow[],
+  imageEnabled:      boolean,
+  outputColumns:     string[],
+  hasPriceRule:      boolean,
+  hasSkuRule:        boolean,
+  anchorText?:       string,
+  targetLanguage?:   string,
+  correctionPrefix?: string,
 ): string {
   // Separate text fields from data fields
   const textFields = outputColumns.filter(k => TEXT_OUTPUT_FIELDS.has(k))
@@ -278,12 +375,29 @@ function buildBatchMessage(
   if (hasPriceRule)  allFields.push('price_rule')
   if (hasSkuRule)    allFields.push('sku_rule')
 
-  const lines: string[] = [
+  const lines: string[] = []
+
+  // ── Layer 1: correction prefix (retry only) ────────────────────────────────
+  if (correctionPrefix) {
+    lines.push(correctionPrefix)
+    lines.push('')
+  }
+
+  // ── Layer 2: language reminder (every batch when translating) ─────────────
+  const needsTranslation = targetLanguage && targetLanguage !== 'en' && targetLanguage !== 'english'
+  if (needsTranslation) {
+    lines.push(`LANGUAGE: ALL output MUST be in ${targetLanguage}. Not English. ${targetLanguage}.`)
+    lines.push(`Translate: title, description, option names (Color→${targetLanguage}, Size→${targetLanguage}), option values (Red→${targetLanguage}, Small→${targetLanguage}), tags, alt text.`)
+    lines.push(`Do NOT leave any field in English.`)
+    lines.push('')
+  }
+
+  lines.push(
     `Process these ${batch.length} product listing(s) according to the instructions.`,
     `Return a JSON array of exactly ${batch.length} object(s).`,
     `Each object must have these fields: ${allFields.join(', ')}.`,
     '',
-  ]
+  )
 
   if (hasPriceRule) {
     lines.push('For price_rule, return an object with:')
@@ -318,6 +432,11 @@ function buildBatchMessage(
   }
 
   lines.push(`Return JSON array with exactly ${batch.length} object(s).`)
+
+  // ── Layer 3: final language check reminder ─────────────────────────────────
+  if (needsTranslation) {
+    lines.push(`FINAL CHECK: Before returning, verify EVERY text field is in ${targetLanguage}. Not English. ${targetLanguage}.`)
+  }
 
   if (anchorText) {
     lines.push('')
@@ -442,6 +561,7 @@ export async function runPipeline(uploadId: string): Promise<void> {
 
   const clientLanguage     = String((client as Record<string, unknown>).language ?? '').toLowerCase().trim()
   const isTranslation      = clientLanguage !== 'english' && clientLanguage !== 'en' && clientLanguage !== ''
+  console.log(`[process-upload] language="${clientLanguage}" isTranslation=${isTranslation} uploadId=${uploadId}`)
   // Resolved sku structure: client override → template default → global default (handled in buildPrompt)
   // promptSku is set after buildPrompt call below — use a placeholder here, overwrite after
   let clientSkuStructure   = String((client as Record<string, unknown>).sku_structure ?? '').trim()
@@ -609,12 +729,12 @@ export async function runPipeline(uploadId: string): Promise<void> {
   const roundCount  = Math.ceil(batchCount / PARALLEL_BATCHES)
 
   // Helper: one API call with retry
-  async function callClaude(batchIdx: number, batchSlice: ProductRow[], anchorText?: string): Promise<{
+  async function callClaude(batchIdx: number, batchSlice: ProductRow[], anchorText?: string, correctionPrefix?: string): Promise<{
     batchIdx: number
     tokens: { input: number; output: number; cached: number }
     parsed: Record<string, string>[] | null
   }> {
-    const userContent = buildBatchMessage(batchSlice, imageEnabled, outputColumns, hasPriceRule, hasSkuRule, anchorText)
+    const userContent = buildBatchMessage(batchSlice, imageEnabled, outputColumns, hasPriceRule, hasSkuRule, anchorText, isTranslation ? clientLanguage : undefined, correctionPrefix)
     let response: Anthropic.Message | null = null
     let lastErr: Error | null = null
 
@@ -767,6 +887,61 @@ export async function runPipeline(uploadId: string): Promise<void> {
         }
       }
 
+      // Language validation + single retry ─────────────────────────────────
+      if (isTranslation) {
+        const langCheckItems = batchSlice.map((_, i) => {
+          const pIdx   = batchIdx * BATCH_SIZE + i
+          const result = parentResults[pIdx]
+          return {
+            title:               result?.title ?? '',
+            description:         result?.description ?? '',
+            option_translations: result?.option_translations ?? [],
+          }
+        })
+        const langIssues = detectLanguageIssues(langCheckItems, clientLanguage)
+        if (langIssues.length > 0) {
+          console.warn(`[LANG CHECK] batch ${batchIdx}: ${langIssues.length} language issue(s) — retrying`)
+          langIssues.forEach(iss => console.warn(`  product ${iss.product} / ${iss.field}: ${iss.issue}`))
+
+          const issueList = langIssues.map(iss => `- Product ${iss.product}, ${iss.field}: ${iss.issue}`).join('\n')
+          const correctionPrefix =
+            `CORRECTION NEEDED. Your previous output was NOT fully in ${clientLanguage}.\n` +
+            `Issues:\n${issueList}\n\n` +
+            `Re-optimize ALL products below. EVERY text field MUST be in ${clientLanguage}. No English.`
+
+          const retryResult = await callClaude(batchIdx, batchSlice, anchorText, correctionPrefix)
+          if (retryResult.parsed) {
+            totalInput  += retryResult.tokens.input
+            totalOutput += retryResult.tokens.output
+            totalCached += retryResult.tokens.cached
+            apiCallsCount++
+
+            for (let i = 0; i < batchSlice.length; i++) {
+              const item  = retryResult.parsed[i] ?? {}
+              const pIdx  = batchIdx * BATCH_SIZE + i
+              const orig  = parentProductRows[pIdx]
+              const retryTitle = String(item.title ?? '').trim()
+              const retryDesc  = String(item.description ?? '').trim()
+              if (retryTitle && retryTitle.length >= 3) {
+                const rawOptionTransRetry = (item as Record<string, unknown>).option_translations
+                const optTransRetry: OptionTranslation[] = Array.isArray(rawOptionTransRetry)
+                  ? (rawOptionTransRetry as OptionTranslation[]) : []
+                parentResults[pIdx] = {
+                  ...parentResults[pIdx]!,
+                  title:               retryTitle,
+                  description:         retryDesc || parentResults[pIdx]?.description || orig.description,
+                  tags:                String(item.tags ?? parentResults[pIdx]?.tags ?? orig.tags),
+                  option_translations: optTransRetry.length > 0 ? optTransRetry : (parentResults[pIdx]?.option_translations ?? []),
+                }
+              }
+            }
+            console.log(`[LANG CHECK] batch ${batchIdx}: retry complete`)
+          } else {
+            console.error(`[LANG CHECK] batch ${batchIdx}: retry failed — keeping original output`)
+          }
+        }
+      }
+
       // Build anchor from first batch result (few-shot for all subsequent batches)
       if (batchIdx === 0 && !anchorText && parsed.length >= 1) {
         const anchorCount = Math.min(2, batchSlice.length)
@@ -774,8 +949,11 @@ export async function runPipeline(uploadId: string): Promise<void> {
           input:  { title: inp.title, description: inp.description },
           output: { title: String(parsed[i]?.title ?? ''), description: String(parsed[i]?.description ?? '') },
         }))
-        anchorText = `## STYLE REFERENCE — Follow this EXACT format for all remaining products\n${JSON.stringify(examples, null, 2)}`
-        console.log(`[process-upload] anchor set from batch 0 (${anchorCount} examples)`)
+        const langLine = isTranslation
+          ? `ALL remaining products MUST be in ${clientLanguage}. These examples are already in ${clientLanguage}. Match this language exactly.\n\n`
+          : ''
+        anchorText = `## STYLE REFERENCE — Follow this EXACT format and language for all remaining products\n${langLine}${JSON.stringify(examples, null, 2)}`
+        console.log(`[process-upload] anchor set from batch 0 (${anchorCount} examples, lang=${clientLanguage})`)
       }
     }
 
