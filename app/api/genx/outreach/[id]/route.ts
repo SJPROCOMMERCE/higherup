@@ -1,7 +1,8 @@
 import { getGenxSession } from '@/lib/genx-auth'
 import { supabase } from '@/lib/supabase'
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   const session = await getGenxSession()
   if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json()
@@ -11,7 +12,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     if (body[key] !== undefined) update[key] = body[key]
   }
   const { data, error } = await supabase.from('lg_outreach').update(update)
-    .eq('id', params.id).eq('lg_id', session.lgId).select().single()
+    .eq('id', id).eq('lg_id', session.lgId).select().single()
   if (error) return Response.json({ error: error.message }, { status: 500 })
   return Response.json({ contact: data })
 }
