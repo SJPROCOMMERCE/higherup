@@ -314,20 +314,27 @@ export type Prompt = {
   name: string
   description: string | null
   niche: string | null
+  niche_col: string | null
   language: string | null
   market: string | null
   version: number
   is_active: boolean | null
   is_default: boolean | null
-
-  // Prompt content
   slug: string | null
+  change_notes: string | null
+  parent_id: string | null
+
+  // Prompt content — "prompt" columns are the full prompt documents;
+  // "instructions" columns are supplementary field-specific rules.
+  // prompt-builder reads title_prompt first, falls back to title_instructions.
   system_prompt: string | null
   title_prompt: string | null
-  description_prompt: string | null
   title_instructions: string | null
+  description_prompt: string | null
   description_instructions: string | null
   seo_instructions: string | null
+  seo_title_instructions: string | null
+  seo_description_instructions: string | null
   formatting_rules: string | null
   alt_text_instructions: string | null
   filename_instructions: string | null
@@ -335,9 +342,14 @@ export type Prompt = {
   price_rules_instructions: string | null
 
   // Examples & tone
+  tone_of_voice: string | null
   tone_examples: string | null
   title_examples: string | null
   description_examples: string | null
+
+  // Usage tracking (may not exist in all DB versions)
+  usage_count: number | null
+  last_used_at: string | null
 
   // SKU
   sku_structure: string | null
@@ -350,16 +362,10 @@ export type Prompt = {
   allow_html: boolean | null
   allow_emoji: boolean | null
 
-  // Tracking
-  parent_prompt_id: string | null
-  usage_count: number | null
-  last_used_at: string | null
-
   // Timestamps & authorship
   created_at: string
   updated_at: string
   created_by: string | null
-  updated_by: string | null
 }
 
 export type PromptVersion = {
