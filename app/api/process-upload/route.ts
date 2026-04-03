@@ -5,6 +5,7 @@ import { logActivity } from '@/lib/activity-log'
 import { buildPrompt } from '@/lib/prompt-builder'
 import { applyPricingToRow } from '@/lib/product-pricing'
 import type { ProductPricingRules } from '@/lib/product-pricing'
+import { OPTION_ALIASES, slugify as skuSlugify } from '@/lib/sku-builder'
 
 // ─── Vercel max function duration ─────────────────────────────────────────────
 export const maxDuration = 300
@@ -353,12 +354,18 @@ type OptResult = {
 
 // ─── SKU builder ──────────────────────────────────────────────────────────────
 
-function slugify(s: string): string {
-  return s.toLowerCase()
-    .replace(/[\s_]+/g, '-')
-    .replace(/[^a-z0-9\-]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
+// Alias for the imported slugify so the rest of the file is unchanged
+const slugify = skuSlugify
+
+// Returns true if optionName (from the CSV or translation output) matches
+// the SKU structure component keyword, using direct slugify AND alias table.
+function optionMatchesKeyword(optionName: string, comp: string): boolean {
+  const slug = slugify(optionName)
+  if (slug === comp) return true
+  // Check alias table: does this optionName belong to the comp's alias group?
+  const aliases = OPTION_ALIASES[comp]
+  if (aliases && aliases.includes(optionName.toLowerCase().trim())) return true
+  return false
 }
 
 function buildVariantSku(
@@ -379,11 +386,10 @@ function buildVariantSku(
     }
 
     // Match component keyword to an option name (original or translated)
+    // Uses: exact slugify match OR alias table match for both original + translated name
     const trans = optionTranslations.find(t =>
-      slugify(t.name) === comp ||
-      slugify(t.translatedName) === comp ||
-      t.name.toLowerCase() === comp ||
-      t.translatedName.toLowerCase() === comp
+      optionMatchesKeyword(t.name, comp) ||
+      optionMatchesKeyword(t.translatedName, comp)
     )
     if (!trans) continue
 
@@ -393,10 +399,11 @@ function buildVariantSku(
       const valueCol = headers.find(h => h.toLowerCase() === `option${i} value`)
       if (!nameCol || !valueCol) continue
       const rowOptName = String(translatedRow[nameCol] ?? '').trim()
-      // Match by translated or original name
+      // Match by translated or original name (or alias)
       if (
         rowOptName.toLowerCase() === trans.translatedName.toLowerCase() ||
-        rowOptName.toLowerCase() === trans.name.toLowerCase()
+        rowOptName.toLowerCase() === trans.name.toLowerCase() ||
+        optionMatchesKeyword(rowOptName, comp)
       ) {
         const val = String(translatedRow[valueCol] ?? '').trim()
         const s = slugify(val)

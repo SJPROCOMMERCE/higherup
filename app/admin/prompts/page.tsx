@@ -1474,6 +1474,7 @@ const emptyDraft = (): DraftPrompt => ({
   title_instructions: '', description_instructions: '',
   seo_instructions: '', formatting_rules: '', alt_text_instructions: '',
   filename_instructions: '', tags_instructions: '', price_rules_instructions: '',
+  sku_structure: '',
   tone_examples: '', title_examples: '', description_examples: '',
   forbidden_words: '', required_keywords: '',
   max_title_length: '', max_description_length: '',
