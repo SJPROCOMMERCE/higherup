@@ -5,7 +5,8 @@ import { logActivity } from '@/lib/activity-log'
 import { buildPrompt } from '@/lib/prompt-builder'
 import { applyPricingToRow } from '@/lib/product-pricing'
 import type { ProductPricingRules } from '@/lib/product-pricing'
-import { OPTION_ALIASES, slugify as skuSlugify } from '@/lib/sku-builder'
+import { OPTION_ALIASES, slugify as skuSlugify, buildSKU } from '@/lib/sku-builder'
+import type { SkuProduct } from '@/lib/sku-builder'
 
 // ─── Vercel max function duration ─────────────────────────────────────────────
 export const maxDuration = 300
@@ -695,7 +696,8 @@ export async function runPipeline(uploadId: string): Promise<void> {
   // Resolve CSV columns for price/sku rule targets
   const priceCol      = headers.find(h => h === 'Variant Price')            ?? fieldToCol.price      ?? ''
   const compareAtCol  = headers.find(h => h === 'Variant Compare At Price') ?? ''
-  const skuCsvCol     = headers.find(h => h === 'Variant SKU')              ?? fieldToCol.sku        ?? ''
+  // Default to 'Variant SKU' so the column is always written even if missing from the input CSV
+  const skuCsvCol     = headers.find(h => h === 'Variant SKU')              ?? fieldToCol.sku        ?? 'Variant SKU'
 
   // 10. Image settings
   const imgSettings    = (upload as Record<string, unknown>).image_settings as Record<string, boolean> | null | undefined
@@ -1074,7 +1076,32 @@ export async function runPipeline(uploadId: string): Promise<void> {
         // Build SKU from translated values (after translations applied above)
         if (clientSkuStructure && skuCsvCol) {
           const builtSku = buildVariantSku(clientSkuStructure, result.title, out, result.option_translations, headers)
-          if (builtSku) out[skuCsvCol] = builtSku
+          if (builtSku) {
+            out[skuCsvCol] = builtSku
+            console.log(`[SKU] translated | ${String(row[handleCol ?? ''] ?? '').slice(0, 30)} | ${String(out[optionCols[0]?.valueCol ?? ''] ?? '')}/${String(out[optionCols[1]?.valueCol ?? ''] ?? '')} → "${builtSku}"`)
+          }
+        }
+      }
+
+      // ── SKU (English / no option_translations) ───────────────────────────
+      // For non-translation uploads, option_translations is empty so the block
+      // above never fires. Build the SKU directly from the row's option columns.
+      if (clientSkuStructure && skuCsvCol && !(isTranslation && result.option_translations.length > 0)) {
+        const skuProduct: SkuProduct = {
+          title:  result.title,
+          vendor: String(out['Vendor']       ?? row['Vendor']       ?? '').trim(),
+          type:   String(out['Product Type'] ?? row['Product Type'] ?? '').trim(),
+        }
+        for (let oi = 1; oi <= 3; oi++) {
+          const nc = headers.find(h => h.toLowerCase() === `option${oi} name`)
+          const vc = headers.find(h => h.toLowerCase() === `option${oi} value`)
+          ;(skuProduct as Record<string, string>)[`option${oi}_name`]  = nc ? String(out[nc] ?? '').trim() : ''
+          ;(skuProduct as Record<string, string>)[`option${oi}_value`] = vc ? String(out[vc] ?? '').trim() : ''
+        }
+        const builtSku = buildSKU(clientSkuStructure, skuProduct)
+        if (builtSku) {
+          out[skuCsvCol] = builtSku
+          console.log(`[SKU] direct | ${String(row[handleCol ?? ''] ?? '').slice(0, 30)} | ${skuProduct.option1_value ?? ''}/${(skuProduct as Record<string, string>)['option2_value'] ?? ''} → "${builtSku}"`)
         }
       }
 
