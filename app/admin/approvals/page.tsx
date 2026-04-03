@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase, type Client, type Prompt } from '@/lib/supabase'
-import { getTiers, getTierSync, DEFAULT_TIERS, type Tier } from '@/lib/pricing'
+import { FREE_PRODUCTS_PER_MONTH, PRICE_PER_PRODUCT } from '@/lib/usage-tracker'
 import { timeAgo } from '@/lib/utils'
 import { logActivity } from '@/lib/activity-log'
 
@@ -225,13 +225,12 @@ type EditVals = {
 }
 
 function ClientApprovalRow({
-  client, vaName, prompts, onActioned, pricingTiers,
+  client, vaName, prompts, onActioned,
 }: {
   client: Client
   vaName: string
   prompts: Prompt[]
   onActioned: (id: string) => void
-  pricingTiers: Tier[]
 }) {
   const [expanded, setExpanded]   = useState(false)
   const [phase, setPhase]         = useState<RowPhase>('idle')
@@ -341,7 +340,10 @@ function ClientApprovalRow({
   }
 
   // ── Normal render ────────────────────────────────────────────────────────────
-  const tier = getTierSync(pricingTiers, client.expected_monthly_products ?? 0)
+  // Per-product pricing estimate for expected monthly products
+  const expectedProducts  = client.expected_monthly_products ?? 0
+  const expectedBillable  = Math.max(0, expectedProducts - FREE_PRODUCTS_PER_MONTH)
+  const expectedShare     = Math.round(expectedBillable * PRICE_PER_PRODUCT * 100) / 100
 
   return (
     <div style={{ borderBottom: `1px solid ${T.row}` }}>
@@ -389,7 +391,7 @@ function ClientApprovalRow({
                   <EditSelect label="Niche" value={editVals.niche} options={NICHE_OPTIONS} onChange={v => setEditVals(p => ({ ...p, niche: v }))} />
                   <EditInput label="Market" value={editVals.market} onChange={v => setEditVals(p => ({ ...p, market: v }))} />
                   <EditSelect label="Language" value={editVals.language} options={LANG_OPTIONS} onChange={v => setEditVals(p => ({ ...p, language: v }))} />
-                  <DetailField label="Expected Products" value={client.expected_monthly_products != null ? `${client.expected_monthly_products} — ${tier.display_name} · $${tier.amount}` : null} />
+                  <DetailField label="Expected Products" value={client.expected_monthly_products != null ? `${client.expected_monthly_products} products · ~$${expectedShare.toFixed(2)}/month share` : null} />
                 </>
               ) : (
                 <>
@@ -401,7 +403,7 @@ function ClientApprovalRow({
                   <DetailField
                     label="Expected Products"
                     value={client.expected_monthly_products != null
-                      ? `${client.expected_monthly_products} — ${tier.display_name} · $${tier.amount}`
+                      ? `${client.expected_monthly_products} products · ~$${expectedShare.toFixed(2)}/month share`
                       : null}
                   />
                 </>
@@ -694,11 +696,6 @@ export default function AdminDashboardPage() {
   const [prompts, setPrompts]     = useState<Prompt[]>([])
   const [loading, setLoading]     = useState(true)
   const [pendingCount, setPendingCount] = useState(0)
-  const [pricingTiers, setPricingTiers] = useState<Tier[]>(DEFAULT_TIERS)
-
-  // Load pricing tiers
-  useEffect(() => { getTiers().then(setPricingTiers) }, [])
-
   // Load VAs + prompts once
   useEffect(() => {
     Promise.all([
@@ -825,7 +822,6 @@ export default function AdminDashboardPage() {
             vaName={vaName}
             prompts={prompts}
             onActioned={handleActioned}
-            pricingTiers={pricingTiers}
           />
         )
       })}

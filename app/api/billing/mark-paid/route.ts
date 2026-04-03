@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-log'
-import { getVaMonthEarnings } from '@/lib/earnings'
 
 // ─── POST /api/billing/mark-paid ──────────────────────────────────────────────
 
@@ -57,16 +56,11 @@ export async function POST(req: Request) {
   }
 
   // Notify VA
-  const amount      = `$${(bill.total_amount as number).toFixed(0)}`
+  const amount      = `$${(bill.total_amount as number).toFixed(2)}`
   const paidMonthLb = formatMonth(bill.month as string)
-  const paidEarnings = await getVaMonthEarnings(bill.va_id as string, bill.month as string)
 
-  const paidTitle = paidEarnings?.hasRates
-    ? `Payment received — you're earning again`
-    : `Payment received — ${amount}`
-  const paidMsg = paidEarnings?.hasRates
-    ? `Your ${amount} HigherUp share for ${paidMonthLb} has been received. Your account is fully active — keep earning!`
-    : `Thank you. Your payment of ${amount} for ${paidMonthLb} has been received. Your account is fully active.`
+  const paidTitle = `Payment received — ${amount}`
+  const paidMsg   = `Thank you. Your HigherUp share of ${amount} for ${paidMonthLb} has been received. Your account is fully active and your outputs are unlocked.`
 
   await supabase.from('notifications').insert({
     va_id:   bill.va_id,
@@ -142,7 +136,7 @@ export async function POST(req: Request) {
         va_id:   affRelation.referrer_va_id,
         type:    'payment_received',
         title:   `Affiliate earnings — $${payoutAmount.toFixed(2)}`,
-        message: `Your referral paid their ${monthLabel} HigherUp share ($${referredFee}). You've earned $${payoutAmount.toFixed(2)} (${percentage}%).`,
+        message: `Your referral paid their ${monthLabel} HigherUp share ($${referredFee.toFixed(2)}). You've earned $${payoutAmount.toFixed(2)} (${percentage}% commission).`,
         is_read: false,
       })
 

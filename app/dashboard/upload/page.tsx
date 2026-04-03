@@ -6,7 +6,7 @@ import { useVA } from '@/context/va-context'
 import { supabase, type Client, type Upload } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-log'
 import type { PreCheckResult } from '@/app/api/pre-check-instructions/route'
-import { getTiers, getTierSync, DEFAULT_TIERS, type Tier } from '@/lib/pricing'
+import { FREE_PRODUCTS_PER_MONTH, PRICE_PER_PRODUCT } from '@/lib/usage-tracker'
 import { getMonthStart } from '@/lib/utils'
 import dynamic from 'next/dynamic'
 import { downloadOutput } from '@/lib/download'
@@ -444,9 +444,6 @@ function UploadForm() {
   const searchParams       = useSearchParams()
   const prefillId          = searchParams.get('client')
 
-  // Pricing tiers
-  const [pricingTiers, setPricingTiers] = useState<Tier[]>(DEFAULT_TIERS)
-
   // Remote data
   const [clients,        setClients]        = useState<Client[]>([])
   const [clientsLoading, setClientsLoading] = useState(true)
@@ -587,9 +584,6 @@ function UploadForm() {
     loadTemplates()
   }, [clientId])
 
-  // ─── Load pricing tiers ────────────────────────────────────────────────────
-  useEffect(() => { getTiers().then(setPricingTiers) }, [])
-
   // ─── Load clients ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!va) return
@@ -728,14 +722,14 @@ function UploadForm() {
           if (r.client_id === activeUpload.client_id) clientUploadCount++
         }
 
-        let totalShare = 0
-        for (const [, vars] of clientVars) {
-          totalShare += getTierSync(pricingTiers, vars).amount
-        }
+        // Per-product pricing: first FREE_PRODUCTS_PER_MONTH free, PRICE_PER_PRODUCT after
+        const totalVariantsAll = [...clientVars.values()].reduce((s, v) => s + v, 0)
+        const billableAll      = Math.max(0, totalVariantsAll - FREE_PRODUCTS_PER_MONTH)
+        const totalShare       = Math.round(billableAll * PRICE_PER_PRODUCT * 100) / 100
 
-        const clientTotal   = clientVars.get(activeUpload.client_id) ?? thisVars
-        const tierForClient = getTierSync(pricingTiers, clientTotal)
-        const share         = clientTotal > 0 ? (tierForClient.amount / clientTotal) * thisVars : 0
+        // This upload's proportional share of the total
+        const clientTotal = clientVars.get(activeUpload.client_id) ?? thisVars
+        const share       = totalVariantsAll > 0 ? (totalShare / totalVariantsAll) * thisVars : 0
         const rate          = selectedClient?.va_rate_per_product ?? null
         const earned        = rate != null ? thisVars * rate : 0
 
@@ -1040,13 +1034,14 @@ function UploadForm() {
     setUploading(false)
   }
 
-  // ─── Tier math (variant-based) ─────────────────────────────────────────────
+  // ─── Per-product pricing preview ───────────────────────────────────────────
   const monthCount  = monthUploads.reduce((s, u) => s + (u.product_row_count ?? 0), 0)
   const uploadCount = parseResult?.productCount ?? 0   // unique products in this upload
   const newTotal    = monthCount + uploadCount
-  const currentTier = getTierSync(pricingTiers, monthCount)
-  const newTier     = getTierSync(pricingTiers, newTotal)
-  const tierUp      = newTier.display_name !== currentTier.display_name
+  const currentBillable = Math.max(0, monthCount  - FREE_PRODUCTS_PER_MONTH)
+  const newBillable     = Math.max(0, newTotal     - FREE_PRODUCTS_PER_MONTH)
+  const currentShare    = Math.round(currentBillable * PRICE_PER_PRODUCT * 100) / 100
+  const newShare        = Math.round(newBillable     * PRICE_PER_PRODUCT * 100) / 100
 
   // Mapping validity
   const mappedFields   = new Set(Object.values(columnMapping).filter(v => v && v !== 'ignore'))
@@ -1713,7 +1708,7 @@ function UploadForm() {
             <div>
               <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#DDDDDD', marginBottom: 4 }}>This month</div>
               <div style={{ fontSize: 20, fontWeight: 600, color: T.black }}>{monthCount}</div>
-              <div style={{ fontSize: 11, color: T.ter, marginTop: 2 }}>products · {currentTier.display_name} · ${currentTier.amount}</div>
+              <div style={{ fontSize: 11, color: T.ter, marginTop: 2 }}>products · ${currentShare.toFixed(2)} share</div>
             </div>
             <div style={{ fontSize: 16, color: '#DDDDDD', alignSelf: 'center', paddingTop: 2 }}>+</div>
             <div>
@@ -1727,8 +1722,9 @@ function UploadForm() {
             <div>
               <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#DDDDDD', marginBottom: 4 }}>Total</div>
               <div style={{ fontSize: 20, fontWeight: 600, color: T.black }}>{newTotal}</div>
-              <div style={{ fontSize: 11, marginTop: 2, color: tierUp ? T.green : T.ter }}>
-                products · {newTier.display_name} · ${newTier.amount}{tierUp && ' ↑'}
+              <div style={{ fontSize: 11, marginTop: 2, color: T.ter }}>
+                products · ${newShare.toFixed(2)} share
+                {newShare > currentShare && <span style={{ color: T.green }}> (+${(newShare - currentShare).toFixed(2)})</span>}
               </div>
             </div>
           </div>

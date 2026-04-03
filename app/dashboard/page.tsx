@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { Upload as UploadIcon } from 'lucide-react'
 import { useVA } from '@/context/va-context'
 import { supabase, type Client, type Upload, type Billing, type Affiliate, type Notification } from '@/lib/supabase'
-import { getTiers, getTierSync, DEFAULT_TIERS, type Tier } from '@/lib/pricing'
+import { FREE_PRODUCTS_PER_MONTH, PRICE_PER_PRODUCT } from '@/lib/usage-tracker'
 import { timeAgo, getMonthStart, formatMonthLabel, getMarketFlag } from '@/lib/utils'
 import { downloadOutput } from '@/lib/download'
 import { PageVideo } from '@/components/dashboard/PageVideo'
@@ -231,8 +231,6 @@ function ClientRow({
   const clientUploads = uploads.filter(u => u.client_id === client.id)
   // Use pre-calculated tracking fields from DB (auto-updated by trigger)
   const monthVariants = client.current_month_variants ?? 0
-  const tierNum       = client.current_month_tier ? client.current_month_tier.slice(-1) : null
-  const tierAmount    = client.current_month_amount ?? 0
   const latestDone = clientUploads
     .filter(u => u.status === 'done')
     .sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime())[0]
@@ -293,12 +291,6 @@ function ClientRow({
               <div style={{ fontSize: 9, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#DDDDDD', marginBottom: 3 }}>Products</div>
               <div style={{ fontSize: 18, fontWeight: 600, color: T.black }}>{monthVariants}</div>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 9, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#DDDDDD', marginBottom: 3 }}>Tier</div>
-              <div style={{ fontSize: 13, fontWeight: 400, color: T.ter }}>
-                {tierNum ? `T${tierNum} · $${tierAmount}` : '—'}
-              </div>
-            </div>
           </div>
         )}
 
@@ -306,10 +298,6 @@ function ClientRow({
           <div style={{ display: 'flex', gap: 40, flexShrink: 0, marginRight: 32 }}>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: 9, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#DDDDDD', marginBottom: 3 }}>Products</div>
-              <div style={{ fontSize: 13, color: T.ter }}>—</div>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 9, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#DDDDDD', marginBottom: 3 }}>Tier</div>
               <div style={{ fontSize: 13, color: T.ter }}>—</div>
             </div>
           </div>
@@ -376,7 +364,6 @@ function ClientRow({
 export default function DashboardPage() {
   const { currentVA } = useVA()
 
-  const [pricingTiers, setPricingTiers] = useState<Tier[]>(DEFAULT_TIERS)
   const [loading,    setLoading]    = useState(true)
   const [clients,    setClients]    = useState<Client[]>([])
   const [uploads,    setUploads]    = useState<Upload[]>([])
@@ -449,7 +436,6 @@ export default function DashboardPage() {
   }, [currentVA])
 
   useEffect(() => { fetchData() }, [fetchData])
-  useEffect(() => { getTiers().then(setPricingTiers) }, [])
 
   // ── Dismiss alert ────────────────────────────────────────────────────────────
   async function handleDismiss(id: string, notificationId?: string) {
@@ -488,9 +474,11 @@ export default function DashboardPage() {
   const activeClients   = clients.filter(c => c.approval_status === 'approved' && c.is_active)
   const monthDone       = uploads.filter(u => u.status === 'done' && new Date(u.uploaded_at) >= monthStart)
   const productsMonth   = monthDone.reduce((s, u) => s + (u.product_row_count ?? 0), 0)
-  const estimatedInv    = activeClients.reduce((tot, c) => {
-    return tot + (c.current_month_amount ?? getTierSync(pricingTiers, c.current_month_variants ?? 0).amount)
-  }, 0)
+
+  // Per-product pricing: first 10 free, $0.25 after
+  const billableProducts = Math.max(0, productsMonth - FREE_PRODUCTS_PER_MONTH)
+  const estimatedInv     = Math.round(billableProducts * PRICE_PER_PRODUCT * 100) / 100
+
   const isFirstMonth     = billing.length === 0
   const clientsWithRates = activeClients.filter(c => c.va_rate_per_product != null)
   const allHaveRates     = activeClients.length > 0 && clientsWithRates.length === activeClients.length
@@ -500,11 +488,7 @@ export default function DashboardPage() {
     if (!cl?.va_rate_per_product) return sum
     return sum + (u.product_row_count ?? 0) * cl.va_rate_per_product
   }, 0)
-  // Share only for clients that have a rate set (so profit is apples-to-apples)
-  const partialShare  = clientsWithRates.reduce((tot, c) => {
-    return tot + (c.current_month_amount ?? getTierSync(pricingTiers, c.current_month_variants ?? 0).amount)
-  }, 0)
-  const partialProfit = Math.round(estimatedIncome - partialShare)
+  const partialProfit = Math.round(estimatedIncome - estimatedInv)
   const clientRateMap = Object.fromEntries(clients.map(c => [c.id, c.va_rate_per_product ?? null]))
   const activeReferrals = affiliates.filter(a => a.is_active).length
   const lockedCount     = uploads.filter(u => u.output_locked === true).length
@@ -678,7 +662,7 @@ export default function DashboardPage() {
                         EST. PROFIT
                       </div>
                       <div style={{ fontSize: 11, color: T.ter, marginTop: 4 }}>
-                        on ${Math.round(estimatedIncome).toLocaleString()} earned · ${partialShare} share
+                        on ${Math.round(estimatedIncome).toLocaleString()} earned · ${estimatedInv.toFixed(2)} share
                       </div>
                     </div>
                   )
@@ -711,10 +695,10 @@ export default function DashboardPage() {
                 return (
                   <div key="invoice" style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: 44, fontWeight: 600, color: T.black, letterSpacing: '-0.04em', lineHeight: 1 }}>
-                      ${estimatedInv}
+                      ${estimatedInv.toFixed(2)}
                     </div>
                     <div style={{ fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.12em', color: T.ter, marginTop: 8 }}>
-                      EST. INVOICE
+                      EST. SHARE
                     </div>
                     <div style={{ fontSize: 11, marginTop: 4 }}>
                       <Link

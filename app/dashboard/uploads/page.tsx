@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useVA } from '@/context/va-context'
 import { supabase, type Client, type Upload } from '@/lib/supabase'
-import { getTiers, getTierSync, DEFAULT_TIERS, type Tier } from '@/lib/pricing'
+import { PRICE_PER_PRODUCT } from '@/lib/usage-tracker'
 import { downloadOutput, downloadInput } from '@/lib/download'
 import { PageVideo } from '@/components/dashboard/PageVideo'
 
@@ -125,12 +125,11 @@ function Pill({ label, active, onClick }: { label: string; active: boolean; onCl
 // ─── History row ──────────────────────────────────────────────────────────────
 
 function HistoryRow({
-  upload, clientName, vaRate, pricingTiers, expanded, onToggle,
+  upload, clientName, vaRate, expanded, onToggle,
 }: {
   upload: Upload
   clientName: string
   vaRate: number | null
-  pricingTiers: Tier[]
   expanded: boolean
   onToggle: () => void
 }) {
@@ -269,8 +268,8 @@ function HistoryRow({
               {(() => {
                 const vars    = u.product_row_count ?? 0
                 const earned  = vars * vaRate
-                const tier    = getTierSync(pricingTiers, vars)
-                const share   = tier.amount
+                // Per-product pricing (approximate share for this upload — exact split calculated at billing time)
+                const share   = Math.round(vars * PRICE_PER_PRODUCT * 100) / 100
                 const profit  = earned - share
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -529,7 +528,6 @@ export default function UploadsPage() {
 
   const [uploads,      setUploads]      = useState<Upload[]>([])
   const [clients,      setClients]      = useState<Client[]>([])
-  const [pricingTiers, setPricingTiers] = useState<Tier[]>(DEFAULT_TIERS)
   const [total,        setTotal]        = useState(0)
   const [loading,      setLoading]      = useState(true)
   const [expandedId,   setExpandedId]   = useState<string | null>(null)
@@ -537,9 +535,6 @@ export default function UploadsPage() {
   const [clientFilter, setClientFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [page,         setPage]         = useState(1)
-
-  // ─── Load pricing tiers ─────────────────────────────────────────────────────
-  useEffect(() => { getTiers().then(setPricingTiers) }, [])
 
   // ─── Load clients for filter ────────────────────────────────────────────────
   useEffect(() => {
@@ -706,7 +701,6 @@ export default function UploadsPage() {
             upload={u}
             clientName={clientMap[u.client_id] ?? u.store_name ?? '—'}
             vaRate={clientRateMap[u.client_id] ?? null}
-            pricingTiers={pricingTiers}
             expanded={expandedId === u.id}
             onToggle={() => setExpandedId(expandedId === u.id ? null : u.id)}
           />

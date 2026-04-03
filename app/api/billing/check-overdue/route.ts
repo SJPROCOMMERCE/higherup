@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-log'
-import { getVaMonthEarnings } from '@/lib/earnings'
 
 // ─── GET /api/billing/check-overdue ───────────────────────────────────────────
 // Run frequently (cron or admin trigger). Escalates unpaid invoices.
@@ -45,13 +44,8 @@ export async function GET(request: Request) {
         reminded_at: now.toISOString(),
       }).eq('id', bill.id)
 
-      const overdueEarnings = await getVaMonthEarnings(bill.va_id as string, bill.month as string)
-      const overdueTitle = overdueEarnings?.hasRates
-        ? `Invoice overdue — pay ${amount} to keep your $${overdueEarnings.earned.toFixed(2)} earning active`
-        : `Invoice overdue — ${amount}`
-      const overdueMsg = overdueEarnings?.hasRates
-        ? `Your ${monthLabel} HigherUp share of ${amount} is overdue. You earned $${overdueEarnings.earned.toFixed(2)} this month — pay now to keep your account active.`
-        : `Your invoice for ${monthLabel} is overdue. Pay ${amount} immediately to keep your account active.`
+      const overdueTitle = `Invoice overdue — ${amount}`
+      const overdueMsg   = `Your HigherUp share of ${amount} for ${monthLabel} is overdue. Pay now to keep your account active and your outputs accessible.`
 
       await supabase.from('notifications').insert({
         va_id:   bill.va_id,
@@ -75,12 +69,8 @@ export async function GET(request: Request) {
         if (va?.status === 'active') {
           await supabase.from('vas').update({ status: 'paused' }).eq('id', bill.va_id)
 
-          const pauseTitle = overdueEarnings?.hasRates
-            ? `Account paused — pay ${amount} to keep earning`
-            : 'Account paused — unpaid invoice'
-          const pauseMsg = overdueEarnings?.hasRates
-            ? `Your account has been paused due to an unpaid HigherUp share of ${amount} for ${monthLabel}. You earned $${overdueEarnings.earned.toFixed(2)} this month — pay within 14 days to resume earning.`
-            : `Your account has been paused due to an unpaid invoice of ${amount} for ${monthLabel}. Pay within 14 days to avoid account deletion.`
+          const pauseTitle = 'Account paused — unpaid invoice'
+          const pauseMsg   = `Your account has been paused due to an unpaid HigherUp share of ${amount} for ${monthLabel}. Pay within 14 days to avoid account deletion.`
 
           await supabase.from('notifications').insert({
             va_id:   bill.va_id,

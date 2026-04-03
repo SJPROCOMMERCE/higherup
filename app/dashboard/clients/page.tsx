@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useVA } from '@/context/va-context'
 import { supabase, type Client, type Upload, type ClientProfile, type Prompt, type ProfileChangeRequest, type PromptRequest } from '@/lib/supabase'
-import { getTier } from '@/lib/tier'
 import { timeAgo, getMarketFlag } from '@/lib/utils'
 import { downloadOutput } from '@/lib/download'
 import { logActivity } from '@/lib/activity-log'
@@ -392,8 +391,6 @@ function ClientRow({
   }
 
   const monthVariants = client.current_month_variants ?? 0
-  const monthTier     = client.current_month_tier ?? getTier(monthVariants).name
-  const monthAmount   = client.current_month_amount ?? getTier(monthVariants).amount
   const statusColor   = getClientStatusColor(client)
   const flag          = getMarketFlag(client.market)
 
@@ -680,7 +677,7 @@ function ClientRow({
 
               <SectionLabel>Billing</SectionLabel>
               <InfoRow label="Payment method" value={client.va_client_payment_method} />
-              <InfoRow label="This month"     value={monthVariants > 0 ? `${monthTier} — $${monthAmount}` : 'No activity yet'} />
+              <InfoRow label="This month"     value={monthVariants > 0 ? `${monthVariants} products` : 'No activity yet'} />
               <InfoRow label="Registered"     value={formatDate(client.registered_at)} />
               {client.approved_at && (
                 <InfoRow label="Approved" value={formatDate(client.approved_at)} />

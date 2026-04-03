@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-log'
+import { logUsage, getCurrentBillingMonth } from '@/lib/usage-tracker'
 import { buildPrompt } from '@/lib/prompt-builder'
 import { applyPricingToRow } from '@/lib/product-pricing'
 import type { ProductPricingRules } from '@/lib/product-pricing'
@@ -1259,7 +1260,15 @@ export async function runPipeline(uploadId: string): Promise<void> {
 
   await logActivity({ action: 'upload_processing_completed', upload_id: uploadId, va_id: String(upload.va_id), source: 'system', details: `${optimizedProducts}/${parentIndices.length} products optimized in ${processingTime}s`, metadata: { products_optimized: optimizedProducts, products_failed: parentIndices.length - optimizedProducts, variants_total: variantRows.length, api_calls: apiCallsCount, cost_usd: Math.round(costUSD * 1e6) / 1e6, time_seconds: processingTime } })
 
-  // 18. Notification
+  // 17b. Log per-product usage (for billing)
+  let usageSummary: { freeCount: number; billableCount: number; totalAmount: number } | null = null
+  try {
+    usageSummary = await logUsage(supabase, String(upload.va_id), uploadId, optimizedProducts)
+  } catch (e) {
+    console.error('[process-upload] Failed to log usage:', e)
+  }
+
+  // 18. Notification (earnings-first framing)
   const vaRate    = (client as unknown as Record<string, unknown>).va_rate_per_product as number | null | undefined
   const partialMsg = optimizedProducts < parentIndices.length
     ? ` ${parentIndices.length - optimizedProducts} product(s) could not be optimized and retain their original text.`
@@ -1268,13 +1277,20 @@ export async function runPipeline(uploadId: string): Promise<void> {
   let notifTitle: string
   let notifMsg:   string
 
+  // Build HigherUp share line for notification
+  const shareInfo = usageSummary && usageSummary.billableCount > 0
+    ? ` HigherUp share: $${usageSummary.totalAmount.toFixed(2)} (${usageSummary.billableCount} × $0.25).`
+    : usageSummary && usageSummary.freeCount > 0
+    ? ` Free (${usageSummary.freeCount} of your 10 free products used this month).`
+    : ''
+
   if (vaRate != null && vaRate > 0) {
     const earned = optimizedProducts * vaRate
     notifTitle = `+$${earned.toFixed(2)} earned — ${String(client.store_name)}`
-    notifMsg   = `${optimizedProducts} products optimized.${partialMsg} Ready to download.`
+    notifMsg   = `${optimizedProducts} products optimized.${partialMsg}${shareInfo} Ready to download.`
   } else {
     notifTitle = `${String(client.store_name)}: ${optimizedProducts} products optimized`
-    notifMsg   = `${optimizedProducts < parentIndices.length ? `${parentIndices.length - optimizedProducts} product(s) could not be optimized and retain their original text. ` : ''}Ready to download.`
+    notifMsg   = `${optimizedProducts < parentIndices.length ? `${parentIndices.length - optimizedProducts} product(s) could not be optimized. ` : ''}${shareInfo} Ready to download.`
   }
 
   await supabase.from('notifications').insert({
@@ -1367,6 +1383,21 @@ export async function POST(req: Request) {
     .eq('id', uploadId)
     .single()
   if (fetchErr || !upload) return Response.json({ error: 'Upload not found' }, { status: 404 })
+
+  // ── Billing gate: block processing if VA has overdue invoice ─────────────
+  const { data: overdueInvoice } = await supabase
+    .from('billing')
+    .select('id, total_amount, month')
+    .eq('va_id', upload.va_id)
+    .eq('status', 'overdue')
+    .limit(1)
+    .maybeSingle()
+
+  if (overdueInvoice) {
+    const msg = `Your account is paused due to an unpaid invoice of $${overdueInvoice.total_amount} for ${overdueInvoice.month}. Pay your HigherUp share to continue processing.`
+    await supabase.from('uploads').update({ status: 'failed', error_message: msg }).eq('id', uploadId)
+    return Response.json({ error: msg, code: 'account_overdue' }, { status: 402 })
+  }
 
   // ── Variant rate limit: max 50,000 variants per VA per day ───────────────
   const thisUploadVariants = upload.product_row_count ?? 0
