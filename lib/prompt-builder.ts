@@ -38,7 +38,7 @@ export async function buildPrompt(
   specialInstructions?: string | null,
   imageEnabled?:       boolean,
   overridePromptId?:   string | null,
-): Promise<{ system: string; title: string; description: string }> {
+): Promise<{ system: string; title: string; description: string; skuStructure: string }> {
 
   // ── 1. Load client + profile ───────────────────────────────────────────────
   const [{ data: clientRaw }, { data: clientPromptRows }] = await Promise.all([
@@ -100,6 +100,7 @@ export async function buildPrompt(
 
   // ── 6. Build system prompt ────────────────────────────────────────────────
   const parts: string[] = []
+  let resolvedSkuStructure = String(prompt?.sku_structure ?? '').trim() || 'title-size-color'
 
   parts.push(String(prompt?.system_prompt ?? '').trim() || fallbackSystem)
 
@@ -112,7 +113,13 @@ export async function buildPrompt(
     const niche         = String(client.niche      ?? 'general')
     const market        = String(client.market     ?? 'international')
     const language      = String(client.language   ?? 'english').toLowerCase().trim()
-    const skuStructure  = String(client.sku_structure ?? '').trim()
+    // Fallback chain: client override → template default → global default
+    resolvedSkuStructure = (
+      String(client.sku_structure ?? '').trim() ||
+      String(prompt?.sku_structure ?? '').trim() ||
+      'title-size-color'
+    )
+    const skuStructure = resolvedSkuStructure
     const isTranslation = language !== 'english' && language !== 'en' && language !== ''
 
     parts.push(
@@ -169,27 +176,39 @@ In your JSON response, include "option_translations" for every product that has 
 If the product has no variants, return "option_translations": [].`)
     }
 
-    // SKU rules
-    if (skuStructure) {
-      parts.push(`
+    // SKU rules — always present (skuStructure has a global default)
+    const skuComponents = skuStructure.split('-').filter(Boolean)
+    const skuExplained = skuComponents.map((part: string) => {
+      switch (part.toLowerCase()) {
+        case 'title':    return `  - "title" → translated product title`
+        case 'size':     return `  - "size" → translated size option value (Option Name: Size, Maat, Taille, etc.)`
+        case 'color':    return `  - "color" → translated color option value (Option Name: Color, Kleur, Couleur, etc.)`
+        case 'material': return `  - "material" → translated material option value`
+        case 'brand':    return `  - "brand" → Vendor/Brand name (do NOT translate brand names)`
+        case 'type':     return `  - "type" → translated product type`
+        default:         return `  - "${part}" → translated value of the "${part}" option`
+      }
+    }).join('\n')
+    parts.push(`
 ## SKU RULES
 
-SKU structure used by this client: "${skuStructure}"
+SKU structure: "${skuStructure}"
 
-CRITICAL ORDER — do NOT build SKUs until all translations are done:
-1. Translate title → get translated title
-2. Translate all option names and values → get translated variants
-3. ONLY THEN: build the SKU from the TRANSLATED values
+Components:
+${skuExplained}
 
-The system will build per-variant SKUs automatically from your translations.
-You do NOT need to return a "sku" field — just make sure option_translations are accurate.`)
-    } else {
-      parts.push(`
-## SKU RULES
+The system builds per-variant SKUs automatically from your option_translations output.
+You do NOT need to return a "sku" field. Just ensure option_translations is complete.
+Format: lowercase, spaces → hyphens, no special characters, no double hyphens, skip empty components.
 
-Do NOT change or generate SKUs. Return sku fields exactly as they are in the input.
-If the input has no SKU, leave it empty.`)
-    }
+Example (structure "title-size-color", target Dutch):
+  Input: Title="Blue Cotton Shirt", Size="Small", Color="Blue"
+  Your output option_translations: [
+    { "name": "Size", "translated_name": "Maat", "values": [{ "original": "Small", "translated": "Klein" }] },
+    { "name": "Color", "translated_name": "Kleur", "values": [{ "original": "Blue", "translated": "Blauw" }] }
+  ]
+  System builds SKU: "blauw-katoenen-shirt-klein-blauw"`)
+
 
     // Standing instructions (VA-editable per client, applied to every upload)
     if (standing) {
@@ -239,5 +258,5 @@ If the input has no SKU, leave it empty.`)
     ''
   ).trim()
 
-  return { system, title, description }
+  return { system, title, description, skuStructure: resolvedSkuStructure }
 }

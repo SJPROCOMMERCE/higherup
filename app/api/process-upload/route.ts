@@ -433,9 +433,11 @@ export async function runPipeline(uploadId: string): Promise<void> {
     .from('clients').select('*').eq('id', upload.client_id).single()
   if (cErr || !client) throw new Error('Client not found')
 
-  const clientSkuStructure = String((client as Record<string, unknown>).sku_structure ?? '').trim()
   const clientLanguage     = String((client as Record<string, unknown>).language ?? '').toLowerCase().trim()
   const isTranslation      = clientLanguage !== 'english' && clientLanguage !== 'en' && clientLanguage !== ''
+  // Resolved sku structure: client override → template default → global default (handled in buildPrompt)
+  // promptSku is set after buildPrompt call below — use a placeholder here, overwrite after
+  let clientSkuStructure   = String((client as Record<string, unknown>).sku_structure ?? '').trim()
 
   // 4-5. (handled inside buildPrompt — see lib/prompt-builder.ts)
 
@@ -573,12 +575,14 @@ export async function runPipeline(uploadId: string): Promise<void> {
   const imageEnabled   = !!(imgSettings?.alt_text || imgSettings?.filename || imgSettings?.title_attribute)
 
   // 11. Build system message via layered prompt builder (same for all batches → cached)
-  const { system: sysBase, title: titleInstr, description: descInstr } = await buildPrompt(
+  const { system: sysBase, title: titleInstr, description: descInstr, skuStructure: promptSku } = await buildPrompt(
     upload.client_id as string,
     upload.special_instructions as string | null,
     imageEnabled,
     (upload as Record<string, unknown>).prompt_id as string | null,
   )
+  // buildPrompt already applies the fallback chain (client → template → default)
+  clientSkuStructure = promptSku
 
   const systemContent = [
     'You are a product listing optimization engine. You follow instructions EXACTLY. Do NOT vary your format between products. Product 1 and product 200 MUST follow the same structure. No improvising. No creative interpretation of format.\n\n',

@@ -318,6 +318,7 @@ type DraftPrompt = {
   filename_instructions: string
   tags_instructions: string
   price_rules_instructions: string
+  sku_structure: string
   tone_examples: string
   title_examples: string
   description_examples: string
@@ -350,6 +351,7 @@ function toDraft(p: Prompt): DraftPrompt {
     filename_instructions:    p.filename_instructions ?? '',
     tags_instructions:        p.tags_instructions ?? '',
     price_rules_instructions: p.price_rules_instructions ?? '',
+    sku_structure:            p.sku_structure ?? '',
     tone_examples:            p.tone_examples ?? '',
     title_examples:           p.title_examples ?? '',
     description_examples:     p.description_examples ?? '',
@@ -484,6 +486,22 @@ function EditForm({
           <FieldLabel>Price rules instructions</FieldLabel>
           <TextArea value={draft.price_rules_instructions} onChange={set('price_rules_instructions')} rows={3}
             placeholder="How the AI should handle price adjustments: rounding rules, margin suggestions…" />
+        </div>
+      </div>
+
+      {/* ── SKU ───────────────────────────────────────────────────── */}
+      <SectionLabel>SKU Structure</SectionLabel>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+        <div>
+          <FieldLabel>SKU structure</FieldLabel>
+          <TextInput
+            value={draft.sku_structure}
+            onChange={set('sku_structure')}
+            placeholder="title-size-color"
+          />
+          <div style={{ fontSize: 11, color: '#CCCCCC', marginTop: 6 }}>
+            Keywords: title, size, color, material, brand, type. Separate with hyphens. Default: title-size-color
+          </div>
         </div>
       </div>
 
@@ -1509,6 +1527,7 @@ function NewPromptModal({
       alt_text_instructions:   draft.alt_text_instructions || null,
       filename_instructions:   draft.filename_instructions || null,
       price_rules_instructions: draft.price_rules_instructions || null,
+      sku_structure:           draft.sku_structure || null,
       tone_examples:           draft.tone_examples || null,
       forbidden_words:         draft.forbidden_words || null,
       required_keywords:       draft.required_keywords || null,
@@ -1729,6 +1748,7 @@ export default function AdminPromptsPage() {
         alt_text_instructions:   editDraft.alt_text_instructions || null,
         filename_instructions:   editDraft.filename_instructions || null,
         price_rules_instructions: editDraft.price_rules_instructions || null,
+        sku_structure:           editDraft.sku_structure || null,
         tone_examples:           editDraft.tone_examples || null,
         forbidden_words:         editDraft.forbidden_words || null,
         required_keywords:       editDraft.required_keywords || null,

@@ -339,6 +339,9 @@ export type Prompt = {
   title_examples: string | null
   description_examples: string | null
 
+  // SKU
+  sku_structure: string | null
+
   // Quality controls
   forbidden_words: string | null
   required_keywords: string | null
