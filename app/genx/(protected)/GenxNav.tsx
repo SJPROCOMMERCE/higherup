@@ -7,8 +7,8 @@ const ITEMS = [
   { href: '/genx/command', label: 'COMMAND', short: 'CMD'   },
   { href: '/genx/network', label: 'NETWORK', short: 'NET'   },
   { href: '/genx/recruit', label: 'RECRUIT', short: 'REC'   },
+  { href: '/genx/toolkit', label: 'TOOLKIT', short: 'TK'    },
   { href: '/genx/payouts', label: 'PAYOUTS', short: 'PAY'   },
-  { href: '/genx/pulse',   label: 'PULSE',   short: 'PULSE' },
 ]
 
 export default function GenxNav({ displayName, lgId }: { displayName: string; lgId: string }) {

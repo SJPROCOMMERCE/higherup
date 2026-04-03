@@ -27,6 +27,14 @@
     {
       "path": "/api/cron/cleanup-pulse",
       "schedule": "0 3 * * 1"
+    },
+    {
+      "path": "/api/cron/genx-daily",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/genx-monthly",
+      "schedule": "0 7 1 * *"
     }
   ]
 }

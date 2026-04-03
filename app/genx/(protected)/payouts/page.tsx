@@ -1,34 +1,45 @@
 import { redirect } from 'next/navigation'
 import { getGenxSession } from '@/lib/genx-auth'
 import { supabase } from '@/lib/supabase'
-import { getCurrentBillingMonth, getPreviousBillingMonth } from '@/lib/usage-tracker'
+import { getCurrentBillingMonth } from '@/lib/usage-tracker'
 import PayoutsClient from './PayoutsClient'
 
 export default async function PayoutsPage() {
   const session = await getGenxSession()
   if (!session) redirect('/genx/login')
   const lgId = session.lgId
-
   const currentMonth = getCurrentBillingMonth()
-  const [currentEarningsRes, payoutsRes, lgRes] = await Promise.all([
+
+  const [lgRes, currentEarningsRes, payoutsRes, leaderboardRes] = await Promise.all([
+    supabase.from('lead_generators').select('payout_method, minimum_payout').eq('id', lgId).single(),
     supabase.from('lg_earnings').select('amount').eq('lg_id', lgId).eq('billing_month', currentMonth),
     supabase.from('lg_payouts').select('*').eq('lg_id', lgId).order('billing_month', { ascending: false }).limit(12),
-    supabase.from('lead_generators').select('minimum_payout, total_earnings').eq('id', lgId).single(),
+    supabase.from('lg_leaderboard').select('rank_earnings, active_vas, earnings, new_signups').eq('lg_id', lgId).eq('period_type', 'month').eq('period', currentMonth).single(),
   ])
 
-  const pendingEarnings = (currentEarningsRes.data || []).reduce((s, r) => s + parseFloat(String(r.amount)), 0)
-  const payouts         = payoutsRes.data || []
-  const rolledOver      = payouts.filter((p: Record<string, unknown>) => p.status === 'rolled_over')
-    .reduce((s, p: Record<string, unknown>) => s + parseFloat(String(p.rolled_over)), 0)
+  // Get all LGs' leaderboard for current month (for ranking context)
+  const { data: allLBRows } = await supabase
+    .from('lg_leaderboard')
+    .select('lg_id, active_vas, earnings, rank_earnings')
+    .eq('period_type', 'month')
+    .eq('period', currentMonth)
+    .order('earnings', { ascending: false })
+
+  const pending = (currentEarningsRes.data || []).reduce((s, r) => s + parseFloat(String(r.amount)), 0)
+  const myRank = (leaderboardRes.data?.rank_earnings as number) || null
+  const totalLGs = (allLBRows || []).length
 
   return (
     <PayoutsClient
+      pending={pending}
       currentMonth={currentMonth}
-      pendingEarnings={pendingEarnings}
-      rolledOver={rolledOver}
+      payouts={payoutsRes.data || []}
+      leaderboardRows={allLBRows || []}
+      myLgId={lgId}
+      myRank={myRank}
+      totalLGs={totalLGs}
+      payoutMethod={lgRes.data?.payout_method as Record<string,string>|null}
       minimumPayout={parseFloat(String(lgRes.data?.minimum_payout || 10))}
-      lifetimeEarnings={parseFloat(String(lgRes.data?.total_earnings || 0))}
-      payouts={payouts as Record<string, unknown>[]}
     />
   )
 }

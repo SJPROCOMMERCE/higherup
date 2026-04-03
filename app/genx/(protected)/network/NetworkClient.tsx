@@ -1,63 +1,72 @@
 'use client'
-
 import { useState } from 'react'
 
 type Row = {
-  va_id: string; va_name: string; signed_up_at: string; status: string
-  products_this_month: number; products_last_month: number
-  velocity_percent: number; total_products_lifetime: number; you_earned: number
+  va_id: string; va_name: string; signed_up_at: string; status: string; source: string
+  products_this_month: number; products_last_month: number; velocity_percent: number
+  total_products_lifetime: number; health_score: number; risk_flag: string|null
+  risk_reason: string|null; you_earned: number; is_new: boolean; first_upload_at: string|null
 }
 type Cohort = { month: string; count: number; avg_products: number; avg_earned: number }
-type SortKey = 'va_name' | 'signed_up_at' | 'products_this_month' | 'velocity_percent' | 'you_earned'
-type Filter   = 'all' | 'active' | 'slow' | 'inactive'
+type Source = { source: string; total: number; active: number; avg_products: number }
+type Filter = 'all' | 'active' | 'slow' | 'risk' | 'new'
+type SortKey = 'va_name' | 'signed_up_at' | 'products_this_month' | 'velocity_percent' | 'health_score' | 'you_earned'
 
 const S = {
   label: { fontSize: 11, fontWeight: 500, color: '#555555', textTransform: 'uppercase' as const, letterSpacing: '0.05em' },
-  mono:  { fontFamily: "'JetBrains Mono', monospace" },
-  card:  { background: '#141414', border: '1px solid #1F1F1F', borderRadius: 8, padding: 24 } as React.CSSProperties,
-}
-
-function statusColor(s: string) {
-  if (s === 'active')   return '#22C55E'
-  if (s === 'slow')     return '#EAB308'
-  if (s === 'inactive') return '#EF4444'
-  return '#555555'
+  mono: { fontFamily: "'JetBrains Mono', monospace" },
+  card: { background: '#141414', border: '1px solid #1F1F1F', borderRadius: 8, padding: 24 } as React.CSSProperties,
+  th: { fontSize: 10, fontWeight: 500, color: '#555555', textTransform: 'uppercase' as const, letterSpacing: '0.05em', padding: '8px 12px', textAlign: 'left' as const, cursor: 'pointer', userSelect: 'none' as const, whiteSpace: 'nowrap' as const },
+  td: { padding: '10px 12px', borderBottom: '1px solid #1F1F1F', verticalAlign: 'top' as const },
 }
 
 function relDate(iso: string) {
   const d = new Date(iso)
   return d.toLocaleString('en', { month: 'short', day: 'numeric' })
 }
-
-function formatMonth(m: string) {
+function fmtMonth(m: string) {
   const [y, mo] = m.split('-')
-  return new Date(Number(y), Number(mo) - 1, 1).toLocaleString('en', { month: 'short', year: 'numeric' })
+  return new Date(Number(y), Number(mo)-1, 1).toLocaleString('en', { month: 'long', year: 'numeric' })
 }
+function healthColor(s: number) {
+  if (s >= 80) return '#FFFFFF'
+  if (s >= 50) return '#888888'
+  return '#EF4444'
+}
+function velocityColor(v: number) {
+  if (v > 5) return '#22C55E'
+  if (v < -5) return '#EF4444'
+  return '#888888'
+}
+function capitalize(s: string) { return s.charAt(0).toUpperCase() + s.slice(1) }
 
-export default function NetworkClient({ rows, cohorts }: { rows: Row[]; cohorts: Cohort[] }) {
-  const [filter, setFilter]   = useState<Filter>('all')
+export default function NetworkClient({ rows, cohorts, sources }: { rows: Row[]; cohorts: Cohort[]; sources: Source[] }) {
+  const [filter, setFilter] = useState<Filter>('all')
   const [sortKey, setSortKey] = useState<SortKey>('you_earned')
   const [sortAsc, setSortAsc] = useState(false)
+  const [expandedId, setExpandedId] = useState<string|null>(null)
 
   const counts = {
-    all:      rows.length,
-    active:   rows.filter(r => r.status === 'active').length,
-    slow:     rows.filter(r => r.status === 'slow').length,
-    inactive: rows.filter(r => r.status === 'inactive' || r.status === 'signed_up').length,
+    all: rows.length,
+    active: rows.filter(r => r.status === 'active').length,
+    slow: rows.filter(r => r.status === 'slow').length,
+    risk: rows.filter(r => r.risk_flag !== null).length,
+    new: rows.filter(r => r.is_new).length,
   }
 
   const filtered = rows
     .filter(r => {
-      if (filter === 'all')      return true
-      if (filter === 'inactive') return r.status === 'inactive' || r.status === 'signed_up'
-      return r.status === filter
+      if (filter === 'all') return true
+      if (filter === 'active') return r.status === 'active'
+      if (filter === 'slow') return r.status === 'slow'
+      if (filter === 'risk') return r.risk_flag !== null
+      if (filter === 'new') return r.is_new
+      return true
     })
     .sort((a, b) => {
-      const av = a[sortKey], bv = b[sortKey]
-      if (typeof av === 'string' && typeof bv === 'string') {
-        return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av)
-      }
-      return sortAsc ? (av as number) - (bv as number) : (bv as number) - (av as number)
+      const aVal = a[sortKey]; const bVal = b[sortKey]
+      if (typeof aVal === 'string' && typeof bVal === 'string') return sortAsc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
+      return sortAsc ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number)
     })
 
   function toggleSort(key: SortKey) {
@@ -65,102 +74,148 @@ export default function NetworkClient({ rows, cohorts }: { rows: Row[]; cohorts:
     else { setSortKey(key); setSortAsc(false) }
   }
 
-  const FILTERS: { key: Filter; label: string; dot: string }[] = [
-    { key: 'all',      label: `ALL ${counts.all}`,      dot: '' },
-    { key: 'active',   label: `${counts.active}`,        dot: '#22C55E' },
-    { key: 'slow',     label: `${counts.slow}`,          dot: '#EAB308' },
-    { key: 'inactive', label: `${counts.inactive}`,      dot: '#EF4444' },
+  const filterTabs: { key: Filter; label: string }[] = [
+    { key: 'all', label: `ALL ${counts.all}` },
+    { key: 'active', label: `ACTIVE ${counts.active}` },
+    { key: 'slow', label: `SLOW ${counts.slow}` },
+    { key: 'risk', label: `AT RISK ${counts.risk}` },
+    { key: 'new', label: `NEW ${counts.new}` },
   ]
+
+  const bestSource = sources.reduce((best, s) => (!best || s.avg_products > best.avg_products ? s : best), null as Source|null)
+  const worstSource = sources.reduce((worst, s) => (!worst || s.avg_products < worst.avg_products ? s : worst), null as Source|null)
 
   return (
     <div>
-      <div style={{ marginBottom: 32, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-        <h1 style={{ fontSize: 20, fontWeight: 600, color: '#FFFFFF', margin: 0 }}>Network</h1>
-        <span style={{ ...S.mono, fontSize: 12, color: '#555555' }}>{rows.length} total VAs</span>
-      </div>
-
       {/* Filter tabs */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
-        {FILTERS.map(f => (
-          <button key={f.key} onClick={() => setFilter(f.key)} style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            background: filter === f.key ? '#FFFFFF' : '#141414',
-            color: filter === f.key ? '#0A0A0A' : '#888888',
-            border: '1px solid',
-            borderColor: filter === f.key ? 'transparent' : '#1F1F1F',
-            borderRadius: 6, padding: '6px 12px', fontSize: 12,
-            fontWeight: filter === f.key ? 600 : 400, cursor: 'pointer',
-          }}>
-            {f.dot && <span style={{ width: 7, height: 7, borderRadius: '50%', background: f.dot, display: 'inline-block' }} />}
-            {f.label}
-          </button>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
+        {filterTabs.map(tab => (
+          <button key={tab.key} onClick={() => setFilter(tab.key)} style={{
+            background: filter === tab.key ? '#FFFFFF' : '#141414',
+            color: filter === tab.key ? '#0A0A0A' : '#888888',
+            border: '1px solid ' + (filter === tab.key ? '#FFFFFF' : '#1F1F1F'),
+            borderRadius: 6, padding: '6px 12px', fontSize: 11, fontWeight: 500,
+            letterSpacing: '0.05em', cursor: 'pointer',
+          }}>{tab.label}</button>
         ))}
       </div>
 
       {/* Table */}
-      <div style={{ border: '1px solid #1F1F1F', borderRadius: 8, overflow: 'hidden' }}>
-        {/* Header */}
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 100px 100px 90px 100px', gap: 0, background: '#141414', borderBottom: '1px solid #1F1F1F', padding: '10px 16px' }}>
-          {(['va_name', 'signed_up_at', 'products_this_month', 'velocity_percent', 'you_earned'] as SortKey[]).map((key, idx) => {
-            const labels = ['NAME', 'JOINED', 'PRODUCTS', 'VELOCITY', 'YOU EARNED']
-            return (
-              <button key={key} onClick={() => toggleSort(key)} style={{
-                ...S.label, background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-                textAlign: idx === 0 ? 'left' : 'right',
-                color: sortKey === key ? '#FFFFFF' : '#555555',
-              }}>
-                {labels[idx]}{sortKey === key ? (sortAsc ? ' ↑' : ' ↓') : ''}
-              </button>
-            )
-          })}
+      <div style={{ ...S.card, padding: 0, overflow: 'hidden', marginBottom: 24 }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #1F1F1F' }}>
+                {([
+                  ['va_name','NAME'],['signed_up_at','JOINED'],['products_this_month','PRODUCTS'],
+                  ['velocity_percent','VELOCITY'],['health_score','HEALTH'],['you_earned','EARNED'],
+                ] as [SortKey, string][]).map(([key, label]) => (
+                  <th key={key} style={S.th} onClick={() => toggleSort(key)}>
+                    {label}{sortKey===key ? (sortAsc?' ↑':' ↓') : ''}
+                  </th>
+                ))}
+                <th style={{ ...S.th, cursor: 'default' }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(row => (
+                <>
+                  <tr key={row.va_id} style={{ cursor: 'pointer' }} onClick={() => setExpandedId(expandedId === row.va_id ? null : row.va_id)}>
+                    <td style={S.td}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {row.risk_flag && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#EF4444', flexShrink: 0 }} />}
+                        {row.is_new && !row.risk_flag && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#22C55E', flexShrink: 0 }} />}
+                        <span style={{ color: '#FFFFFF', fontSize: 13, fontWeight: 500 }}>{row.va_name}</span>
+                      </div>
+                    </td>
+                    <td style={S.td}><span style={{ ...S.mono, fontSize: 12, color: '#888888' }}>{relDate(row.signed_up_at)}</span></td>
+                    <td style={S.td}><span style={{ ...S.mono, fontSize: 12, color: '#FFFFFF' }}>{row.products_this_month.toLocaleString()}</span></td>
+                    <td style={S.td}>
+                      <span style={{ ...S.mono, fontSize: 12, color: velocityColor(row.velocity_percent) }}>
+                        {row.velocity_percent === 0 ? '—' : `${row.velocity_percent > 0 ? '+' : ''}${row.velocity_percent.toFixed(0)}%`}
+                      </span>
+                    </td>
+                    <td style={S.td}><span style={{ ...S.mono, fontSize: 12, color: healthColor(row.health_score) }}>{row.health_score}</span></td>
+                    <td style={S.td}><span style={{ ...S.mono, fontSize: 12, color: '#22C55E' }}>${row.you_earned.toFixed(2)}</span></td>
+                    <td style={S.td}><span style={{ fontSize: 12, color: '#555555' }}>···</span></td>
+                  </tr>
+                  {expandedId === row.va_id && (
+                    <tr key={row.va_id + '-expanded'}>
+                      <td colSpan={7} style={{ padding: '12px 24px 16px', background: '#0F0F0F', borderBottom: '1px solid #1F1F1F' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+                          <div>
+                            <div style={{ ...S.label, marginBottom: 6 }}>Source</div>
+                            <div style={{ fontSize: 13, color: '#888888' }}>{capitalize(row.source)}</div>
+                          </div>
+                          <div>
+                            <div style={{ ...S.label, marginBottom: 6 }}>Lifetime Products</div>
+                            <div style={{ ...S.mono, fontSize: 13, color: '#FFFFFF' }}>{row.total_products_lifetime.toLocaleString()}</div>
+                          </div>
+                          <div>
+                            <div style={{ ...S.label, marginBottom: 6 }}>First Upload</div>
+                            <div style={{ fontSize: 13, color: '#888888' }}>{row.first_upload_at ? relDate(row.first_upload_at) : 'Never'}</div>
+                          </div>
+                          {row.risk_flag && (
+                            <div style={{ gridColumn: '1 / -1' }}>
+                              <div style={{ ...S.label, marginBottom: 6 }}>Risk</div>
+                              <div style={{ fontSize: 12, color: '#EF4444' }}>{row.risk_reason || row.risk_flag}</div>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
+              ))}
+            </tbody>
+          </table>
         </div>
-
-        {/* Rows */}
-        {filtered.length === 0 ? (
-          <div style={{ padding: 24, color: '#555555', fontSize: 13, textAlign: 'center' }}>No VAs in this category</div>
-        ) : filtered.map((r, i) => (
-          <div key={r.va_id} style={{
-            display: 'grid', gridTemplateColumns: '2fr 100px 100px 90px 100px',
-            padding: '12px 16px',
-            borderBottom: i < filtered.length - 1 ? '1px solid #1F1F1F' : 'none',
-            alignItems: 'center',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: statusColor(r.status), display: 'inline-block', flexShrink: 0 }} />
-              <span style={{ color: '#FFFFFF', fontSize: 13, fontWeight: 500 }}>{r.va_name}</span>
-            </div>
-            <div style={{ ...S.mono, fontSize: 12, color: '#888888', textAlign: 'right' }}>{relDate(r.signed_up_at)}</div>
-            <div style={{ ...S.mono, fontSize: 13, color: '#FFFFFF', textAlign: 'right' }}>{r.products_this_month}</div>
-            <div style={{ ...S.mono, fontSize: 12, textAlign: 'right', color: r.velocity_percent > 0 ? '#22C55E' : r.velocity_percent < 0 ? '#EF4444' : '#888888' }}>
-              {r.velocity_percent !== 0 ? `${r.velocity_percent > 0 ? '+' : ''}${r.velocity_percent.toFixed(0)}%` : '—'}
-            </div>
-            <div style={{ ...S.mono, fontSize: 13, color: '#22C55E', textAlign: 'right' }}>
-              ${r.you_earned.toFixed(2)}
-            </div>
-          </div>
-        ))}
+        {filtered.length === 0 && (
+          <div style={{ padding: 40, textAlign: 'center', color: '#555555', fontSize: 13 }}>No VAs in this category</div>
+        )}
       </div>
 
       {/* Cohort performance */}
       {cohorts.length > 0 && (
-        <div style={{ ...S.card, marginTop: 40 }}>
-          <span style={{ ...S.label, display: 'block', marginBottom: 16 }}>Cohort Performance</span>
-          {cohorts.map((c, i) => (
-            <div key={c.month} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: i < cohorts.length - 1 ? '1px solid #1F1F1F' : 'none' }}>
-              <span style={{ fontSize: 13, color: '#888888' }}>
-                {formatMonth(c.month)}
-                <span style={{ color: '#555555' }}> · {c.count} VA{c.count !== 1 ? 's' : ''}</span>
-              </span>
-              <div style={{ display: 'flex', gap: 24 }}>
-                <span style={{ ...S.mono, fontSize: 12, color: '#888888' }}>
-                  avg <span style={{ color: '#FFFFFF' }}>{c.avg_products}</span> products
-                </span>
-                <span style={{ ...S.mono, fontSize: 12, color: '#22C55E' }}>
-                  ${c.avg_earned.toFixed(2)} avg
-                </span>
+        <div style={{ ...S.card, marginBottom: 24 }}>
+          <div style={{ ...S.label, marginBottom: 16 }}>Cohorts</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {cohorts.map((c, i) => (
+              <div key={c.month} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: i < cohorts.length - 1 ? '1px solid #1F1F1F' : 'none' }}>
+                <span style={{ fontSize: 13, color: '#888888' }}>{fmtMonth(c.month)} <span style={{ color: '#555555' }}>({c.count} VAs)</span></span>
+                <div style={{ display: 'flex', gap: 24 }}>
+                  <span style={{ ...S.mono, fontSize: 12, color: '#888888' }}>avg <span style={{ color: '#FFFFFF' }}>{c.avg_products}</span> prod/mo</span>
+                  <span style={{ ...S.mono, fontSize: 12, color: '#22C55E' }}>${c.avg_earned.toFixed(2)}/VA</span>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Source performance */}
+      {sources.length > 0 && (
+        <div style={S.card}>
+          <div style={{ ...S.label, marginBottom: 16 }}>Sources</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {sources.map((src, i) => (
+              <div key={src.source} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: i < sources.length - 1 ? '1px solid #1F1F1F' : 'none' }}>
+                <div>
+                  <span style={{ fontSize: 13, color: '#FFFFFF', fontWeight: 500 }}>{capitalize(src.source)}</span>
+                  <span style={{ ...S.mono, fontSize: 12, color: '#555555', marginLeft: 12 }}>{src.total} VAs · {src.active} active</span>
+                </div>
+                <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                  <span style={{ ...S.mono, fontSize: 12, color: '#888888' }}>avg {src.avg_products} prod/mo</span>
+                  {bestSource && src.source === bestSource.source && (
+                    <span style={{ fontSize: 11, color: '#22C55E', letterSpacing: '0.04em' }}>Best</span>
+                  )}
+                  {worstSource && src.source === worstSource.source && sources.length > 1 && (
+                    <span style={{ fontSize: 11, color: '#EF4444', letterSpacing: '0.04em' }}>Low quality</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
