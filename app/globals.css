@@ -1,5 +1,5 @@
-@import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
 
 /* ─── GENX Design System ──────────────────────────────── */
 .genx-bg       { background: #0A0A0A; }
