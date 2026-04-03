@@ -13,8 +13,8 @@ export const maxDuration = 300
 
 const MAX_CONCURRENT       = 5
 const MAX_DAILY_VARIANTS   = 50_000
-const BATCH_SIZE           = 25   // products per API call
-const PARALLEL_BATCHES     = 3    // batches sent simultaneously
+const BATCH_SIZE           = 5    // small batches → Claude stays consistent across products
+const PARALLEL_BATCHES     = 1    // sequential — allows anchor product system
 
 // Pricing: https://www.anthropic.com/pricing
 const COST_INPUT  = 3    / 1_000_000   // $3.00 per MTok
@@ -258,6 +258,7 @@ function buildBatchMessage(
   outputColumns:  string[],
   hasPriceRule:   boolean,
   hasSkuRule:     boolean,
+  anchorText?:    string,
 ): string {
   // Separate text fields from data fields
   const textFields = outputColumns.filter(k => TEXT_OUTPUT_FIELDS.has(k))
@@ -308,6 +309,12 @@ function buildBatchMessage(
   }
 
   lines.push(`Return JSON array with exactly ${batch.length} object(s).`)
+
+  if (anchorText) {
+    lines.push('')
+    lines.push(anchorText)
+  }
+
   return lines.join('\n')
 }
 
@@ -496,10 +503,11 @@ export async function runPipeline(uploadId: string): Promise<void> {
   )
 
   const systemContent = [
+    'You are a product listing optimization engine. You follow instructions EXACTLY. Do NOT vary your format between products. Product 1 and product 200 MUST follow the same structure. No improvising. No creative interpretation of format.\n\n',
     sysBase,
-    titleInstr  ? `\n\n## TITLE INSTRUCTIONS\n${titleInstr}`       : '',
-    descInstr   ? `\n\n## DESCRIPTION INSTRUCTIONS\n${descInstr}`  : '',
-    '\n\nCRITICAL: Respond ONLY with valid JSON. No markdown. No explanation.',
+    titleInstr  ? `\n\n## TITLE INSTRUCTIONS — APPLY EXACTLY, SAME FORMAT FOR EVERY PRODUCT\n${titleInstr}`      : '',
+    descInstr   ? `\n\n## DESCRIPTION INSTRUCTIONS — APPLY EXACTLY, SAME FORMAT FOR EVERY PRODUCT\n${descInstr}` : '',
+    '\n\nCRITICAL: Respond ONLY with valid JSON array. No markdown. No explanation. Every product MUST follow the same structure.',
   ].join('')
 
   // 12. Claude API — parallel batch processing of PARENT rows only
@@ -512,20 +520,21 @@ export async function runPipeline(uploadId: string): Promise<void> {
   const roundCount  = Math.ceil(batchCount / PARALLEL_BATCHES)
 
   // Helper: one API call with retry
-  async function callClaude(batchIdx: number, batchSlice: ProductRow[]): Promise<{
+  async function callClaude(batchIdx: number, batchSlice: ProductRow[], anchorText?: string): Promise<{
     batchIdx: number
     tokens: { input: number; output: number; cached: number }
     parsed: Record<string, string>[] | null
   }> {
-    const userContent = buildBatchMessage(batchSlice, imageEnabled, outputColumns, hasPriceRule, hasSkuRule)
+    const userContent = buildBatchMessage(batchSlice, imageEnabled, outputColumns, hasPriceRule, hasSkuRule, anchorText)
     let response: Anthropic.Message | null = null
     let lastErr: Error | null = null
 
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         response = await anthropic.messages.create({
-          model:      'claude-sonnet-4-6',
-          max_tokens: 8192,
+          model:       'claude-sonnet-4-6',
+          max_tokens:  8192,
+          temperature: 0,   // deterministic output — critical for consistency
           system: [
             {
               type:          'text',
@@ -578,14 +587,17 @@ export async function runPipeline(uploadId: string): Promise<void> {
     }
   }
 
-  // Process in parallel rounds of PARALLEL_BATCHES
+  // Anchor: after batch 0, inject first 2 input→output examples into all subsequent batches
+  let anchorText = ''
+
+  // Process in sequential rounds (PARALLEL_BATCHES=1 → one batch per round)
   for (let round = 0; round < roundCount; round++) {
     const promises: ReturnType<typeof callClaude>[] = []
     for (let i = 0; i < PARALLEL_BATCHES; i++) {
       const b = round * PARALLEL_BATCHES + i
       if (b >= batchCount) break
       const batchSlice = parentProductRows.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE)
-      promises.push(callClaude(b, batchSlice))
+      promises.push(callClaude(b, batchSlice, b > 0 ? anchorText : undefined))
     }
 
     const roundResults = await Promise.all(promises)
@@ -599,10 +611,29 @@ export async function runPipeline(uploadId: string): Promise<void> {
 
       if (!parsed) continue
       const batchSlice = parentProductRows.slice(batchIdx * BATCH_SIZE, (batchIdx + 1) * BATCH_SIZE)
+
+      // Validate output count matches input count
+      if (parsed.length !== batchSlice.length) {
+        console.warn(`[process-upload] batch ${batchIdx} count mismatch: expected ${batchSlice.length}, got ${parsed.length}`)
+      }
+
       for (let i = 0; i < batchSlice.length; i++) {
         const item     = parsed[i] ?? {}
         const pIdx     = batchIdx * BATCH_SIZE + i
         const orig     = parentProductRows[pIdx]
+
+        // Validate title/description are present and non-empty
+        const title = String(item.title ?? '').trim()
+        const description = String(item.description ?? '').trim()
+        if (!title || title.length < 3) {
+          console.warn(`[process-upload] batch ${batchIdx} product ${i + 1}: title missing or too short ("${title}")`)
+        }
+        if (!description || description.length < 10) {
+          console.warn(`[process-upload] batch ${batchIdx} product ${i + 1}: description missing or too short`)
+        }
+
+        // Log style consistency check against anchor
+        console.log(`[process-upload] batch ${batchIdx} product ${i + 1} title: "${title.substring(0, 80)}"`)
 
         // Collect simple extra data fields (non-rule, non-price)
         const extras: Record<string, string> = {}
@@ -627,8 +658,8 @@ export async function runPipeline(uploadId: string): Promise<void> {
             : null
 
         parentResults[pIdx] = {
-          title:               String(item.title               ?? orig.title),
-          description:         String(item.description         ?? orig.description),
+          title:               title       || orig.title,
+          description:         description || orig.description,
           tags:                String(item.tags                ?? orig.tags),
           seo_title:           String(item.seo_title           ?? ''),
           seo_description:     String(item.seo_description     ?? ''),
@@ -639,6 +670,17 @@ export async function runPipeline(uploadId: string): Promise<void> {
           price_rule:          priceRule,
           sku_rule:            skuRule,
         }
+      }
+
+      // Build anchor from first batch result (few-shot for all subsequent batches)
+      if (batchIdx === 0 && !anchorText && parsed.length >= 1) {
+        const anchorCount = Math.min(2, batchSlice.length)
+        const examples = batchSlice.slice(0, anchorCount).map((inp, i) => ({
+          input:  { title: inp.title, description: inp.description },
+          output: { title: String(parsed[i]?.title ?? ''), description: String(parsed[i]?.description ?? '') },
+        }))
+        anchorText = `## STYLE REFERENCE — Follow this EXACT format for all remaining products\n${JSON.stringify(examples, null, 2)}`
+        console.log(`[process-upload] anchor set from batch 0 (${anchorCount} examples)`)
       }
     }
 
