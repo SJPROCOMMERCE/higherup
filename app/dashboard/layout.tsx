@@ -22,7 +22,7 @@ const NAV_KEYS = [
   { key: 'support',       href: '/dashboard/support',    exact: false },
   { key: 'billing',       href: '/dashboard/billing',    exact: false },
   { key: 'affiliates',    href: '/dashboard/affiliates', exact: false },
-  { key: 'pricing',       href: '/dashboard/pricing',    exact: false },
+  { key: 'profit',        href: '/dashboard/profit',     exact: false },
   { key: 'successCenter', href: '/dashboard/success',    exact: false },
   { key: 'profile',       href: '/dashboard/profile',    exact: false },
 ] as const
