@@ -440,3 +440,48 @@ export type PromptRequest = {
   created_at: string
   updated_at: string
 }
+
+// ─── Support Chat ──────────────────────────────────────────────────────────────
+
+export type SupportConversation = {
+  id:                      string
+  va_id:                   string
+  subject:                 string
+  category:                'bug' | 'question' | 'feature_request' | 'billing' | 'general'
+  status:                  'open' | 'awaiting_admin' | 'awaiting_va' | 'resolved' | 'closed'
+  priority:                'low' | 'normal' | 'high'
+  admin_id:                string | null
+  unread_admin:            number
+  unread_va:               number
+  last_message_at:         string | null
+  last_message_preview:    string | null
+  created_at:              string
+  updated_at:              string
+  resolved_at:             string | null
+  closed_at:               string | null
+  auto_close_warning_sent: boolean
+}
+
+export type SupportMessage = {
+  id:              string
+  conversation_id: string
+  sender_id:       string
+  sender_role:     'va' | 'admin'
+  message:         string
+  message_type:    'text' | 'image' | 'system'
+  attachment_url:  string | null
+  attachment_name: string | null
+  read_at:         string | null
+  created_at:      string
+}
+
+export type SupportCannedResponse = {
+  id:          string
+  title:       string
+  message:     string
+  category:    string | null
+  usage_count: number
+  created_by:  string | null
+  created_at:  string
+}
+

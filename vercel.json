@@ -11,6 +11,10 @@
     {
       "path": "/api/check-deadlines",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/auto-close-support",
+      "schedule": "0 3 * * *"
     }
   ]
 }

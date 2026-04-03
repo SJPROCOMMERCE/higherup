@@ -19,6 +19,7 @@ const NAV_KEYS = [
   { key: 'clients',       href: '/dashboard/clients',    exact: false },
   { key: 'history',       href: '/dashboard/uploads',    exact: false },
   { key: 'messages',      href: '/dashboard/messages',   exact: false },
+  { key: 'support',       href: '/dashboard/support',    exact: false },
   { key: 'billing',       href: '/dashboard/billing',    exact: false },
   { key: 'affiliates',    href: '/dashboard/affiliates', exact: false },
   { key: 'pricing',       href: '/dashboard/pricing',    exact: false },
@@ -32,9 +33,10 @@ function Inner({ children }: { children: React.ReactNode }) {
   const { currentVA, logout, refreshVA } = useVA()
   const { dark }  = useDarkMode()
   const { tr }    = useLanguage()
-  const [hydrated,  setHydrated]  = useState(false)
-  const [menuOpen,  setMenuOpen]  = useState(false)
-  const [msgCount,  setMsgCount]  = useState(0)
+  const [hydrated,      setHydrated]      = useState(false)
+  const [menuOpen,      setMenuOpen]      = useState(false)
+  const [msgCount,      setMsgCount]      = useState(0)
+  const [supportCount,  setSupportCount]  = useState(0)
 
   // Load unread message count for this VA
   useEffect(() => {
@@ -45,6 +47,14 @@ function Inner({ children }: { children: React.ReactNode }) {
       .eq('va_id', currentVA.id)
       .eq('awaiting_va_response', true)
       .then(({ count }) => setMsgCount(count ?? 0))
+
+    // Load unread support chat count
+    supabase
+      .from('support_conversations')
+      .select('id', { count: 'exact', head: true })
+      .eq('va_id', currentVA.id)
+      .gt('unread_va', 0)
+      .then(({ count }) => setSupportCount(count ?? 0))
   }, [currentVA?.id, pathname])
 
   useEffect(() => { setHydrated(true) }, [])
@@ -159,6 +169,15 @@ function Inner({ children }: { children: React.ReactNode }) {
                 {label}
                 {item.href === '/dashboard/messages' && msgCount > 0 && (
                   <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-primary)', marginLeft: 4 }}>({msgCount})</span>
+                )}
+                {item.href === '/dashboard/support' && supportCount > 0 && (
+                  <span style={{
+                    background: '#EF4444', color: '#FFFFFF', fontSize: 10, fontWeight: 700,
+                    borderRadius: '50%', width: 16, height: 16, marginLeft: 4,
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {supportCount > 9 ? '9+' : supportCount}
+                  </span>
                 )}
               </Link>
             )

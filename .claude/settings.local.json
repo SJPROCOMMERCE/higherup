@@ -98,7 +98,18 @@
       "Bash(for f:*)",
       "Bash(do echo:*)",
       "Read(//Users/safouaneelajjouri/Documents/HigherUp/app/admin/$f/**)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(ls /Users/safouaneelajjouri/Documents/HigherUp/tailwind.config*)",
+      "Bash(git stash:*)",
+      "Bash(grep -rn \"vaId\\\\|va_id\\\\|currentVa\\\\|localStorage.*va\\\\|useVa\\\\|VaContext\\\\|getVaId\" --include=*.tsx --include=*.ts /Users/safouaneelajjouri/Documents/HigherUp/app/dashboard/ /Users/safouaneelajjouri/Documents/HigherUp/lib/ /Users/safouaneelajjouri/Documents/HigherUp/components/)",
+      "Bash(head -5 grep -n \"currentVA\\\\|useVA\\\\|VAContext\" /Users/safouaneelajjouri/Documents/HigherUp/app/dashboard/clients/page.tsx)",
+      "Bash(grep -rn \"ratePerProduct\\\\|rate_per_product\\\\|va_rate\\\\|rate.*per.*product\\\\|YOUR RATE\\\\|ratePerProduct\\\\|vaRate\\\\|clientRate\" --include=*.tsx --include=*.ts /Users/safouaneelajjouri/Documents/HigherUp/app/dashboard/)",
+      "Bash(grep -n \"<select\\\\|background\\\\|option\" /Users/safouaneelajjouri/Documents/HigherUp/app/join/[token]/OnboardingForm.tsx)",
+      "Bash(grep -rn \"hu-dropdown\\\\|hu-dropdown-list\\\\|hu-dropdown-option\" --include=*.tsx --include=*.ts --include=*.css --include=*.scss /Users/safouaneelajjouri/Documents/HigherUp/)",
+      "Bash(grep -rn hu-dropdown-list --include=*.tsx /Users/safouaneelajjouri/Documents/HigherUp/app/ /Users/safouaneelajjouri/Documents/HigherUp/components/)",
+      "Bash(head -3 grep -n \"T\\\\.bg\\\\|bg:\" /Users/safouaneelajjouri/Documents/HigherUp/app/admin/vas/page.tsx)",
+      "Bash(head -3 grep -n \"T\\\\.bg\\\\|bg:\" /Users/safouaneelajjouri/Documents/HigherUp/app/admin/dashboard/page.tsx)",
+      "Bash(head -3 grep -n \"T\\\\.bg\\\\|bg:\" /Users/safouaneelajjouri/Documents/HigherUp/app/dashboard/upload/ManualEntry.tsx)"
     ]
   }
 }

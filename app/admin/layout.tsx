@@ -12,6 +12,7 @@ const NAV = [
   { label: 'Approvals',  href: '/admin/approvals' },
   { label: 'Flagged',    href: '/admin/flagged' },
   { label: 'Messages',   href: '/admin/messages' },
+  { label: 'Support',    href: '/admin/support' },
   { label: 'Requests',   href: '/admin/requests' },
   { label: "VA's",       href: '/admin/vas' },
   { label: 'Clients',    href: '/admin/clients' },
@@ -31,6 +32,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [pendingVAs,      setPendingVAs]      = useState(0)
   const [flaggedCount,    setFlaggedCount]    = useState(0)
   const [msgCount,        setMsgCount]        = useState(0)
+  const [supportUnread,   setSupportUnread]   = useState(0)
 
   useEffect(() => {
     supabase
@@ -66,6 +68,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       .select('id', { count: 'exact', head: true })
       .eq('awaiting_admin_response', true)
       .then(({ count }) => setMsgCount(count ?? 0))
+
+    // Support chat: unread conversations for admin
+    supabase
+      .from('support_conversations')
+      .select('id', { count: 'exact', head: true })
+      .gt('unread_admin', 0)
+      .in('status', ['open', 'awaiting_admin'])
+      .then(({ count }) => setSupportUnread(count ?? 0))
   }, [pathname])
 
   // Login + entry page — no nav
@@ -133,6 +143,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 )}
                 {item.href === '/admin/messages' && msgCount > 0 && (
                   <span style={{ fontSize: 11, color: '#999999', fontWeight: 500 }}>({msgCount})</span>
+                )}
+                {item.href === '/admin/support' && supportUnread > 0 && (
+                  <span style={{
+                    background: '#EF4444', color: '#FFFFFF', fontSize: 9, fontWeight: 700,
+                    borderRadius: '50%', width: 15, height: 15, marginLeft: 3,
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {supportUnread > 9 ? '9+' : supportUnread}
+                  </span>
                 )}
               </Link>
             )
