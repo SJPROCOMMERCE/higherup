@@ -711,6 +711,17 @@ export async function runPipeline(uploadId: string): Promise<void> {
   // buildPrompt already applies the fallback chain (client → template → default)
   clientSkuStructure = promptSku
 
+  // ── Debug: log what the engine is about to send ───────────────────────────
+  console.log(`[process-upload] ========= PROMPT DEBUG =========`)
+  console.log(`[process-upload] uploadId=${uploadId} clientId=${upload.client_id}`)
+  console.log(`[process-upload] outputColumns=${JSON.stringify(outputColumns)}`)
+  console.log(`[process-upload] skuStructure="${clientSkuStructure}" language="${clientLanguage}" isTranslation=${isTranslation}`)
+  console.log(`[process-upload] sysBase length=${sysBase.length} | first 200 chars: ${sysBase.slice(0, 200).replace(/\n/g, '↵')}`)
+  console.log(`[process-upload] titleInstr length=${titleInstr.length}${titleInstr ? ` | first 100: ${titleInstr.slice(0, 100).replace(/\n/g, '↵')}` : ' | EMPTY — no title instructions'}`)
+  console.log(`[process-upload] descInstr  length=${descInstr.length}${descInstr ? ` | first 100: ${descInstr.slice(0, 100).replace(/\n/g, '↵')}` : ' | EMPTY — no description instructions'}`)
+  console.log(`[process-upload] parentProducts=${parentProductRows.length} variantRows=${variantRows.length} batchSize=${BATCH_SIZE}`)
+  console.log(`[process-upload] ================================`)
+
   const systemContent = [
     'You are a product listing optimization engine. You follow instructions EXACTLY. Do NOT vary your format between products. Product 1 and product 200 MUST follow the same structure. No improvising. No creative interpretation of format.\n\n',
     sysBase,
@@ -841,8 +852,13 @@ export async function runPipeline(uploadId: string): Promise<void> {
           console.warn(`[process-upload] batch ${batchIdx} product ${i + 1}: description missing or too short`)
         }
 
-        // Log style consistency check against anchor
-        console.log(`[process-upload] batch ${batchIdx} product ${i + 1} title: "${title.substring(0, 80)}"`)
+        // Log style + content check
+        const origTitle = String(orig.title ?? '').trim()
+        const changed = title !== origTitle
+        console.log(`[process-upload] batch ${batchIdx} p${i + 1} ${changed ? 'CHANGED' : 'UNCHANGED'} | "${origTitle.slice(0, 50)}" → "${title.slice(0, 50)}"`)
+        if (!changed) {
+          console.warn(`[process-upload] batch ${batchIdx} p${i + 1}: title NOT changed — Claude returned same value. Check system prompt has instructions.`)
+        }
 
         // Collect simple extra data fields (non-rule, non-price)
         const extras: Record<string, string> = {}

@@ -55,6 +55,8 @@ export async function buildPrompt(
   const assignedPromptId = (clientPromptRows ?? [])[0]?.prompt_id ?? legacyProfilePromptId
   const promptId = overridePromptId ?? assignedPromptId
 
+  console.log(`[prompt-builder] client=${clientId} overridePromptId=${overridePromptId ?? 'none'} assignedPromptId=${assignedPromptId ?? 'none'} → resolving promptId=${promptId ?? 'none'}`)
+
   // ── 3. Load linked prompt template ────────────────────────────────────────
   let prompt: PromptRow | null = null
 
@@ -66,17 +68,17 @@ export async function buildPrompt(
       .single()
     const linked = data as PromptRow | null
     if (linked?.is_active) {
-      // Template is active — use it
       prompt = linked
+      console.log(`[prompt-builder] loaded assigned template: "${linked.name}" (${promptId}) | sys=${String(linked.system_prompt ?? '').length}chars title=${String(linked.title_prompt ?? linked.title_instructions ?? '').length}chars desc=${String(linked.description_prompt ?? linked.description_instructions ?? '').length}chars`)
     } else if (linked && !linked.is_active) {
-      // Template has been deactivated — fall through to default
-      console.warn(`[prompt-builder] Template "${linked.name}" (${promptId}) for client ${clientId} is inactive. Falling back to default.`)
+      console.warn(`[prompt-builder] template "${linked.name}" (${promptId}) is inactive → falling back to default`)
+    } else {
+      console.warn(`[prompt-builder] template ${promptId} not found in DB → falling back to default`)
     }
   }
 
   // ── 3b. Auto-create client_profiles record if missing ─────────────────────
   if (!profile && client) {
-    // Ensure a profile record exists (with null prompt_id = use default)
     await supabase.from('client_profiles').upsert(
       { client_id: clientId, prompt_id: null },
       { onConflict: 'client_id', ignoreDuplicates: true },
@@ -85,7 +87,8 @@ export async function buildPrompt(
 
   // ── 4. Fall back to default active template ───────────────────────────────
   if (!prompt) {
-    const { data } = await supabase
+    console.log(`[prompt-builder] no assigned template — querying for is_default=true is_active=true`)
+    const { data, error: defaultErr } = await supabase
       .from('prompts')
       .select('*')
       .eq('is_default', true)
@@ -93,10 +96,30 @@ export async function buildPrompt(
       .limit(1)
       .single()
     prompt = data as PromptRow | null
+    if (prompt) {
+      console.log(`[prompt-builder] using default template: "${prompt.name}" (${prompt.id}) | sys=${String(prompt.system_prompt ?? '').length}chars title=${String(prompt.title_prompt ?? prompt.title_instructions ?? '').length}chars desc=${String(prompt.description_prompt ?? prompt.description_instructions ?? '').length}chars`)
+    } else {
+      console.error(`[prompt-builder] NO default template found (is_default=true is_active=true) — error: ${defaultErr?.message}. Using hard fallback. CHECK: does any prompt row have is_default=true AND is_active=true?`)
+    }
   }
 
-  // ── 5. Hard fallback if DB has no prompts at all ──────────────────────────
-  const fallbackSystem = 'You are an expert e-commerce product listing optimizer. Rewrite product listings to maximize conversion and search visibility on Google Shopping. Output valid JSON only. No explanations.'
+  // ── 5. Hard fallback if DB has no active default prompt ──────────────────
+  // This fallback must be meaningful enough to produce real optimization,
+  // not just a generic sentence that results in unchanged output.
+  const fallbackSystem = [
+    'You are an expert e-commerce product listing optimizer.',
+    'Your job: rewrite product listings to maximize conversion and search visibility on Google Shopping.',
+    '',
+    '## TITLE RULES',
+    'Write SEO-optimized titles. Structure: [Brand] + [Product Type] + [Key Feature] + [Material/Color/Size if relevant].',
+    'Be descriptive and use terms shoppers actually search for. Max 80 characters.',
+    '',
+    '## DESCRIPTION RULES',
+    'Write compelling product descriptions. Include: what it is, key features, material/specs, who it is for.',
+    'Use short paragraphs. Between 100-200 words. Professional e-commerce tone.',
+    '',
+    'Output valid JSON only. No markdown, no explanations.',
+  ].join('\n')
 
   // ── 6. Build system prompt ────────────────────────────────────────────────
   const parts: string[] = []
