@@ -105,13 +105,15 @@ export async function buildPrompt(
 
   // Layer 4: client-specific context
   if (client) {
-    const titlePref  = String(client.title_preference  ?? 'medium')
-    const descDepth  = String(client.description_style ?? 'standard')
-    const standing   = String(client.special_instructions ?? '').trim()
-    const storeName  = String(client.store_name ?? '')
-    const niche      = String(client.niche      ?? 'general')
-    const market     = String(client.market     ?? 'international')
-    const language   = String(client.language   ?? 'English')
+    const titlePref     = String(client.title_preference  ?? 'medium')
+    const descDepth     = String(client.description_style ?? 'standard')
+    const standing      = String(client.special_instructions ?? '').trim()
+    const storeName     = String(client.store_name ?? '')
+    const niche         = String(client.niche      ?? 'general')
+    const market        = String(client.market     ?? 'international')
+    const language      = String(client.language   ?? 'english').toLowerCase().trim()
+    const skuStructure  = String(client.sku_structure ?? '').trim()
+    const isTranslation = language !== 'english' && language !== 'en' && language !== ''
 
     parts.push(
       `\n## CLIENT CONTEXT` +
@@ -126,6 +128,67 @@ export async function buildPrompt(
     }
     if (DESC_DEPTH_MAP[descDepth]) {
       parts.push(`- Description depth: ${DESC_DEPTH_MAP[descDepth]}`)
+    }
+
+    // Translation rules (when output language is not English)
+    if (isTranslation) {
+      parts.push(`
+## TRANSLATION RULES
+
+Target language: ${language}
+
+Translate ALL of the following into ${language}:
+- Product title
+- Product description
+- Variant option NAMES (e.g. "Color" → ${language} word, "Size" → ${language} word, "Material" → ${language} word)
+- Variant option VALUES (e.g. "Red" → translated, "Small" → translated, "Cotton" → translated)
+- Alt text (if present)
+- Tags (if human-readable words, NOT codes)
+
+Do NOT translate:
+- Handles (URL slugs — keep exactly as-is)
+- Image URLs
+- Brand names (keep original unless client specifies otherwise)
+- Barcodes / product codes / numeric codes
+- SKUs (these are rebuilt AFTER translation — see SKU RULES below)
+
+Translation quality:
+- Write like a native ${language} speaker. Not machine translation.
+- Use terms that shoppers in the target market actually search for.
+- Do NOT mix languages. If target is ${language}, EVERYTHING must be ${language} (except brand names).
+- Size terms: translate to the local convention (e.g. "Small" → local word, not always "S").
+
+In your JSON response, include "option_translations" for every product that has variants:
+[
+  {
+    "name": "Color",
+    "translated_name": "${language}-word-for-Color",
+    "values": [{ "original": "Red", "translated": "${language}-word-for-Red" }]
+  }
+]
+If the product has no variants, return "option_translations": [].`)
+    }
+
+    // SKU rules
+    if (skuStructure) {
+      parts.push(`
+## SKU RULES
+
+SKU structure used by this client: "${skuStructure}"
+
+CRITICAL ORDER — do NOT build SKUs until all translations are done:
+1. Translate title → get translated title
+2. Translate all option names and values → get translated variants
+3. ONLY THEN: build the SKU from the TRANSLATED values
+
+The system will build per-variant SKUs automatically from your translations.
+You do NOT need to return a "sku" field — just make sure option_translations are accurate.`)
+    } else {
+      parts.push(`
+## SKU RULES
+
+Do NOT change or generate SKUs. Return sku fields exactly as they are in the input.
+If the input has no SKU, leave it empty.`)
     }
 
     // Standing instructions (VA-editable per client, applied to every upload)

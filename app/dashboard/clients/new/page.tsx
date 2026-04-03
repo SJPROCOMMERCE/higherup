@@ -668,6 +668,7 @@ export default function NewClientPage() {
       title_preference:         form.title_preference || null,
       description_style:        form.description_style || null,
       special_instructions:     specialParts || null,
+      sku_structure:            hasCustomRequirements === true ? (customData.skuStructure?.trim() || null) : null,
       approval_status:          'pending',
       is_active:                true,
       deadline_48h:             form.start_date ? new Date(form.start_date + 'T00:00:00').toISOString() : null,

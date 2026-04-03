@@ -225,16 +225,17 @@ type ProductRow = {
   tags:           string
   type:           string
   vendor:         string
-  variantSummary: string  // "Size: S, M, L | Color: Black, White"
+  variantSummary: string
+  options:        { name: string; values: string[] }[]  // structured for translation
   hasImages:      boolean
 }
 
-// ─── Variant summary builder ──────────────────────────────────────────────────
+// ─── Variant option parser ────────────────────────────────────────────────────
 
-function buildVariantSummary(
+function parseVariantOptions(
   variantGroup:  Record<string, string>[],
   headers:       string[],
-): string {
+): { summary: string; options: { name: string; values: string[] }[] } {
   const groups: { name: string; values: string[] }[] = []
   for (let i = 1; i <= 3; i++) {
     const nameCol  = headers.find(h => h.toLowerCase() === `option${i} name`)
@@ -247,7 +248,10 @@ function buildVariantSummary(
     )]
     if (values.length) groups.push({ name: optName, values })
   }
-  return groups.map(g => `${g.name}: ${g.values.join(', ')}`).join(' | ')
+  return {
+    summary: groups.map(g => `${g.name}: ${g.values.join(', ')}`).join(' | '),
+    options: groups,
+  }
 }
 
 // ─── Batch message builder ────────────────────────────────────────────────────
@@ -298,12 +302,16 @@ function buildBatchMessage(
     lines.push(`Product ${p.index + 1}:`)
     lines.push(`Title: ${p.title || '(empty)'}`)
     lines.push(`Description: ${p.description || '(empty)'}`)
-    if (p.tags)           lines.push(`Tags: ${p.tags}`)
-    if (p.vendor)         lines.push(`Vendor: ${p.vendor}`)
-    if (p.type)           lines.push(`Type: ${p.type}`)
-    if (p.price)          lines.push(`Price: ${p.price}`)
-    if (p.sku)            lines.push(`SKU: ${p.sku}`)
-    if (p.variantSummary) lines.push(`Variants: ${p.variantSummary}`)
+    if (p.tags)    lines.push(`Tags: ${p.tags}`)
+    if (p.vendor)  lines.push(`Vendor: ${p.vendor}`)
+    if (p.type)    lines.push(`Type: ${p.type}`)
+    if (p.price)   lines.push(`Price: ${p.price}`)
+    if (p.sku)     lines.push(`Current SKU: ${p.sku}`)
+    if (p.options.length > 0) {
+      p.options.forEach(opt => lines.push(`Option ${opt.name}: ${opt.values.join(', ')}`))
+    } else if (p.variantSummary) {
+      lines.push(`Variants: ${p.variantSummary}`)
+    }
     lines.push(`Has images: ${p.hasImages ? 'yes' : 'no'}`)
     lines.push('')
   }
@@ -320,6 +328,12 @@ function buildBatchMessage(
 
 // ─── Result type ──────────────────────────────────────────────────────────────
 
+type OptionTranslation = {
+  name:           string
+  translatedName: string
+  values:         { original: string; translated: string }[]
+}
+
 type OptResult = {
   title:               string
   description:         string
@@ -329,11 +343,70 @@ type OptResult = {
   alt_text:            string
   filename_suggestion: string
   title_attribute:     string
+  option_translations: OptionTranslation[]
   // Dynamic extra columns (simple values applied to all rows)
   extras:              Record<string, string>
   // Rule-based mutations applied to every row
   price_rule:          PriceRule | null
   sku_rule:            SkuRule   | null
+}
+
+// ─── SKU builder ──────────────────────────────────────────────────────────────
+
+function slugify(s: string): string {
+  return s.toLowerCase()
+    .replace(/[\s_]+/g, '-')
+    .replace(/[^a-z0-9\-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
+function buildVariantSku(
+  skuStructure:       string,
+  translatedTitle:    string,
+  translatedRow:      Record<string, string>,
+  optionTranslations: OptionTranslation[],
+  headers:            string[],
+): string {
+  const components = skuStructure.split('-').map(c => c.trim().toLowerCase()).filter(Boolean)
+  const parts: string[] = []
+
+  for (const comp of components) {
+    if (comp === 'title') {
+      const s = slugify(translatedTitle)
+      if (s) parts.push(s)
+      continue
+    }
+
+    // Match component keyword to an option name (original or translated)
+    const trans = optionTranslations.find(t =>
+      slugify(t.name) === comp ||
+      slugify(t.translatedName) === comp ||
+      t.name.toLowerCase() === comp ||
+      t.translatedName.toLowerCase() === comp
+    )
+    if (!trans) continue
+
+    // Find which option column this maps to in this variant row
+    for (let i = 1; i <= 3; i++) {
+      const nameCol  = headers.find(h => h.toLowerCase() === `option${i} name`)
+      const valueCol = headers.find(h => h.toLowerCase() === `option${i} value`)
+      if (!nameCol || !valueCol) continue
+      const rowOptName = String(translatedRow[nameCol] ?? '').trim()
+      // Match by translated or original name
+      if (
+        rowOptName.toLowerCase() === trans.translatedName.toLowerCase() ||
+        rowOptName.toLowerCase() === trans.name.toLowerCase()
+      ) {
+        const val = String(translatedRow[valueCol] ?? '').trim()
+        const s = slugify(val)
+        if (s) parts.push(s)
+        break
+      }
+    }
+  }
+
+  return parts.filter(Boolean).join('-')
 }
 
 // ─── Core pipeline ────────────────────────────────────────────────────────────
@@ -359,6 +432,10 @@ export async function runPipeline(uploadId: string): Promise<void> {
   const { data: client, error: cErr } = await supabase
     .from('clients').select('*').eq('id', upload.client_id).single()
   if (cErr || !client) throw new Error('Client not found')
+
+  const clientSkuStructure = String((client as Record<string, unknown>).sku_structure ?? '').trim()
+  const clientLanguage     = String((client as Record<string, unknown>).language ?? '').toLowerCase().trim()
+  const isTranslation      = clientLanguage !== 'english' && clientLanguage !== 'en' && clientLanguage !== ''
 
   // 4-5. (handled inside buildPrompt — see lib/prompt-builder.ts)
 
@@ -459,7 +536,7 @@ export async function runPipeline(uploadId: string): Promise<void> {
   const parentProductRows: ProductRow[] = parentIndices.map((rowIdx, batchPos) => {
     const row   = variantRows[rowIdx]
     const group = variantsByParent.get(rowIdx) ?? [row]
-    const variantSummary = buildVariantSummary(group, headers)
+    const { summary: variantSummary, options } = parseVariantOptions(group, headers)
     const hasImages = imageSrcCol
       ? group.some(v => String(v[imageSrcCol] ?? '').trim() !== '')
       : false
@@ -473,6 +550,7 @@ export async function runPipeline(uploadId: string): Promise<void> {
       type:           fieldToCol.type        ? String(row[fieldToCol.type]        ?? '') : '',
       vendor:         fieldToCol.vendor      ? String(row[fieldToCol.vendor]      ?? '') : '',
       variantSummary,
+      options,
       hasImages,
     }
   })
@@ -657,6 +735,11 @@ export async function runPipeline(uploadId: string): Promise<void> {
             ? rawSkuRule as SkuRule
             : null
 
+        const rawOptionTrans = (item as Record<string, unknown>).option_translations
+        const optionTranslations: OptionTranslation[] = Array.isArray(rawOptionTrans)
+          ? (rawOptionTrans as OptionTranslation[])
+          : []
+
         parentResults[pIdx] = {
           title:               title       || orig.title,
           description:         description || orig.description,
@@ -666,6 +749,7 @@ export async function runPipeline(uploadId: string): Promise<void> {
           alt_text:            String(item.alt_text ?? item.image_alt_text ?? ''),
           filename_suggestion: String(item.filename_suggestion ?? ''),
           title_attribute:     String(item.title_attribute     ?? ''),
+          option_translations: optionTranslations,
           extras,
           price_rule:          priceRule,
           sku_rule:            skuRule,
@@ -700,6 +784,14 @@ export async function runPipeline(uploadId: string): Promise<void> {
   // 13. Build output rows (one per variant)
   const isShopify       = isShopifyHeaders(headers)
   const hasPartialFail  = results.some(r => r === null)
+
+  // Precompute option column names (same for all rows in a Shopify CSV)
+  const optionCols: { nameCol: string; valueCol: string }[] = []
+  for (let oi = 1; oi <= 3; oi++) {
+    const nameCol  = headers.find(h => h.toLowerCase() === `option${oi} name`)
+    const valueCol = headers.find(h => h.toLowerCase() === `option${oi} value`)
+    if (nameCol && valueCol) optionCols.push({ nameCol, valueCol })
+  }
 
   // Shopify already has SEO Title / SEO Description / Image Alt Text columns
   // For non-Shopify we add them as new columns at the end
@@ -755,6 +847,30 @@ export async function runPipeline(uploadId: string): Promise<void> {
       // ── SKU rule → apply to EVERY row using its own current SKU
       if (result.sku_rule && skuCsvCol) {
         out[skuCsvCol] = applySkuRule(result.sku_rule, String(row[skuCsvCol] ?? ''))
+      }
+
+      // ── Option translations → apply to EVERY row (name + value per option)
+      if ((isTranslation || clientSkuStructure) && result.option_translations.length > 0) {
+        for (const { nameCol, valueCol } of optionCols) {
+          const origOptName = String(row[nameCol] ?? '').trim()
+          if (!origOptName) continue
+          const trans = result.option_translations.find(
+            t => t.name.toLowerCase() === origOptName.toLowerCase()
+          )
+          if (!trans) continue
+          if (isTranslation && trans.translatedName) out[nameCol] = trans.translatedName
+          const origValue = String(row[valueCol] ?? '').trim()
+          if (origValue && isTranslation) {
+            const vt = trans.values.find(v => v.original === origValue)
+            if (vt) out[valueCol] = vt.translated
+          }
+        }
+
+        // Build SKU from translated values (after translations applied above)
+        if (clientSkuStructure && skuCsvCol) {
+          const builtSku = buildVariantSku(clientSkuStructure, result.title, out, result.option_translations, headers)
+          if (builtSku) out[skuCsvCol] = builtSku
+        }
       }
 
     } else if (!isShopify) {
