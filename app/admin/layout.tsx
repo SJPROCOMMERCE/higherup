@@ -21,6 +21,7 @@ const NAV = [
   { label: 'Billing',    href: '/admin/billing' },
   { label: 'Finance',    href: '/admin/finance' },
   { label: 'Affiliates', href: '/admin/affiliates' },
+  { label: 'GENX',       href: '/admin/genx' },
   { label: 'Videos',     href: '/admin/videos' },
   { label: 'Logs',       href: '/admin/logs' },
 ]

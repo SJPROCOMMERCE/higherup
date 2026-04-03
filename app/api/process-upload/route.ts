@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-log'
 import { logUsage, getCurrentBillingMonth } from '@/lib/usage-tracker'
+import { processLGEarnings } from '@/lib/genx-earnings'
 import { buildPrompt } from '@/lib/prompt-builder'
 import { applyPricingToRow } from '@/lib/product-pricing'
 import type { ProductPricingRules } from '@/lib/product-pricing'
@@ -1261,11 +1262,23 @@ export async function runPipeline(uploadId: string): Promise<void> {
   await logActivity({ action: 'upload_processing_completed', upload_id: uploadId, va_id: String(upload.va_id), source: 'system', details: `${optimizedProducts}/${parentIndices.length} products optimized in ${processingTime}s`, metadata: { products_optimized: optimizedProducts, products_failed: parentIndices.length - optimizedProducts, variants_total: variantRows.length, api_calls: apiCallsCount, cost_usd: Math.round(costUSD * 1e6) / 1e6, time_seconds: processingTime } })
 
   // 17b. Log per-product usage (for billing)
-  let usageSummary: { freeCount: number; billableCount: number; totalAmount: number } | null = null
+  let usageSummary: { freeCount: number; billableCount: number; totalAmount: number; id?: string } | null = null
   try {
     usageSummary = await logUsage(supabase, String(upload.va_id), uploadId, optimizedProducts)
   } catch (e) {
     console.error('[process-upload] Failed to log usage:', e)
+  }
+
+  // 17c. Log LG earnings (GENX — best effort, never blocks upload)
+  try {
+    await processLGEarnings(
+      String(upload.va_id),
+      usageSummary ? (uploadId as string) : null,
+      optimizedProducts,
+      getCurrentBillingMonth()
+    )
+  } catch (e) {
+    console.error('[genx] processLGEarnings failed (non-blocking):', e)
   }
 
   // 18. Notification (earnings-first framing)

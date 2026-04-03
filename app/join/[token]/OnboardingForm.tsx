@@ -495,6 +495,21 @@ export function OnboardingForm({ token: _token, inviteId }: { token: string; inv
         }
       }
 
+      // Link GENX referral (if VA arrived via /ref/[code])
+      try {
+        const genxCookie = document.cookie.split('; ').find(c => c.startsWith('genx_referral='))
+        const genxCode   = genxCookie ? genxCookie.split('=')[1] : null
+        if (genxCode) {
+          await fetch('/api/genx/link-referral', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ va_id: (newVa as { id: string }).id, referral_code: genxCode }),
+          })
+          // Clear the cookie
+          document.cookie = 'genx_referral=; Max-Age=0; path=/'
+        }
+      } catch { /* non-blocking */ }
+
       // Mark invite used
       await supabase.from('invites').update({ used: true }).eq('id', inviteId)
 
