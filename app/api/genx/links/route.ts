@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://higherup.me'
   const srcShort = (source as string).toLowerCase().slice(0, 2)
   const linkCode = `${lg.referral_code}-${srcShort}`
-  const fullUrl = `${appUrl}/join/${linkCode}`
+  const fullUrl = `${appUrl}/ref/${linkCode}`
 
   const { data: existing } = await supabase.from('referral_links').select('id').eq('link_code', linkCode).single()
   if (existing) return Response.json({ error: 'Link for this source already exists' }, { status: 409 })

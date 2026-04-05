@@ -17,7 +17,7 @@ export default async function RecruitPage() {
 
   const referralCode = (lgRes.data?.referral_code as string) || ''
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://higherup.me'
-  const defaultLink = `${appUrl}/join/${referralCode}`
+  const defaultLink = `${appUrl}/ref/${referralCode}`
 
   return (
     <RecruitClient
