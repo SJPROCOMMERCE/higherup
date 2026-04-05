@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getGenxSession } from '@/lib/genx-auth'
-import { genxDb } from '@/lib/genx-db'
+import { genxDb, toMonthDate } from '@/lib/genx-db'
 import { getCurrentBillingMonth } from '@/lib/usage-tracker'
 import PayoutsClient from './PayoutsClient'
 
@@ -12,15 +12,15 @@ export default async function PayoutsPage() {
   const currentMonth = getCurrentBillingMonth()
 
   const [currentEarningsRes, payoutsRes, myLBRes] = await Promise.all([
-    db.from('lg_earnings').select('amount').eq('lg_id', lgId).eq('billing_month', currentMonth),
+    db.from('lg_earnings').select('amount').eq('lg_id', lgId).eq('billing_month', toMonthDate(currentMonth)),
     db.from('lg_payouts').select('*').eq('lg_id', lgId).order('created_at', { ascending: false }).limit(12),
-    db.from('lg_leaderboard').select('rank, active_vas, total_earned').eq('lg_id', lgId).eq('billing_month', currentMonth).single(),
+    db.from('lg_leaderboard').select('rank, active_vas, total_earned').eq('lg_id', lgId).eq('billing_month', toMonthDate(currentMonth)).single(),
   ])
 
   const { data: allLBRows } = await db
     .from('lg_leaderboard')
     .select('lg_id, active_vas, total_earned, rank')
-    .eq('billing_month', currentMonth)
+    .eq('billing_month', toMonthDate(currentMonth))
     .order('rank', { ascending: true })
 
   const pending  = (currentEarningsRes.data || []).reduce((s, r) => s + parseFloat(String(r.amount)), 0)

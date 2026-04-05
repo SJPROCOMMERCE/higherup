@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getGenxSession } from '@/lib/genx-auth'
-import { genxDb } from '@/lib/genx-db'
+import { genxDb, toMonthDate } from '@/lib/genx-db'
 import { getCurrentBillingMonth, getPreviousBillingMonth } from '@/lib/usage-tracker'
 import ActionFeed from './ActionFeed'
 import WeeklyTargets from './WeeklyTargets'
@@ -30,9 +30,9 @@ export default async function CommandPage() {
 
   const [lgRes, thisRes, lastRes, twoRes, activeRes, actionsRes, signupsRes] = await Promise.all([
     db.from('lead_generators').select('total_earned, total_vas, active_vas').eq('id', lgId).single(),
-    db.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', currentMonth),
-    db.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', lastMonth),
-    db.from('lg_earnings').select('amount').eq('lg_id', lgId).eq('billing_month', twoAgo),
+    db.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', toMonthDate(currentMonth)),
+    db.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', toMonthDate(lastMonth)),
+    db.from('lg_earnings').select('amount').eq('lg_id', lgId).eq('billing_month', toMonthDate(twoAgo)),
     db.from('referral_tracking').select('id').eq('lg_id', lgId).eq('status', 'active'),
     db.from('lg_actions').select('*').eq('lg_id', lgId).eq('completed', false).eq('dismissed', false).order('priority', { ascending: false }).limit(10),
     db.from('referral_tracking').select('id').eq('lg_id', lgId).gte('referred_at', weekAgo),

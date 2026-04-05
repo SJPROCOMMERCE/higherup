@@ -1,5 +1,5 @@
 import { getGenxSession } from '@/lib/genx-auth'
-import { genxDb } from '@/lib/genx-db'
+import { genxDb, toMonthDate } from '@/lib/genx-db'
 import { getCurrentBillingMonth, getPreviousBillingMonth } from '@/lib/usage-tracker'
 
 function prevMonth(m: string): string {
@@ -19,9 +19,9 @@ export async function GET() {
 
   const [lgRes, thisRes, lastRes, twoRes, activeRes, attentionRes] = await Promise.all([
     db.from('lead_generators').select('total_earned, total_vas, active_vas').eq('id', lgId).single(),
-    db.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', currentMonth),
-    db.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', lastMonth),
-    db.from('lg_earnings').select('amount').eq('lg_id', lgId).eq('billing_month', twoAgo),
+    db.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', toMonthDate(currentMonth)),
+    db.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', toMonthDate(lastMonth)),
+    db.from('lg_earnings').select('amount').eq('lg_id', lgId).eq('billing_month', toMonthDate(twoAgo)),
     db.from('referral_tracking').select('id').eq('lg_id', lgId).eq('status', 'active'),
     db.from('referral_tracking')
       .select('va_user_id, status, referred_at')

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { toMonthDate } from './genx-db'
 
 export const LG_EARNING_RATE = 0.05  // $0.05 per product
 
@@ -34,7 +35,7 @@ export async function processLGEarnings(
     const { error: earnError } = await db.from('lg_earnings').insert({
       lg_id:         lgId,
       va_user_id:    vaId,
-      billing_month: billingMonth,
+      billing_month: toMonthDate(billingMonth),
       products:      productCount,
       amount,
     })

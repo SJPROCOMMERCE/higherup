@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getGenxSession } from '@/lib/genx-auth'
-import { genxDb } from '@/lib/genx-db'
+import { genxDb, toMonthDate } from '@/lib/genx-db'
 import { getCurrentBillingMonth } from '@/lib/usage-tracker'
 import NetworkClient from './NetworkClient'
 
@@ -20,7 +20,7 @@ export default async function NetworkPage() {
     db.from('lg_earnings')
       .select('va_user_id, amount')
       .eq('lg_id', lgId)
-      .eq('billing_month', currentMonth),
+      .eq('billing_month', toMonthDate(currentMonth)),
   ])
 
   const referrals = referralsRes.data || []

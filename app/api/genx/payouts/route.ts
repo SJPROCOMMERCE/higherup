@@ -1,5 +1,5 @@
 import { getGenxSession } from '@/lib/genx-auth'
-import { genxDb } from '@/lib/genx-db'
+import { genxDb, toMonthDate } from '@/lib/genx-db'
 import { getCurrentBillingMonth } from '@/lib/usage-tracker'
 
 export async function GET() {
@@ -11,7 +11,7 @@ export async function GET() {
   const currentMonth = getCurrentBillingMonth()
 
   const [currentEarningsRes, payoutsRes, lgRes] = await Promise.all([
-    db.from('lg_earnings').select('amount').eq('lg_id', lgId).eq('billing_month', currentMonth),
+    db.from('lg_earnings').select('amount').eq('lg_id', lgId).eq('billing_month', toMonthDate(currentMonth)),
     db.from('lg_payouts').select('*').eq('lg_id', lgId).order('created_at', { ascending: false }).limit(12),
     db.from('lead_generators').select('total_earned, pending_payout').eq('id', lgId).single(),
   ])
