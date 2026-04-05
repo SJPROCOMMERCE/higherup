@@ -12,7 +12,7 @@ export default async function AdminGenxPage() {
   const [lgsRes, pendingRes, payoutsRes] = await Promise.all([
     supabase.from('lead_generators').select('*').order('created_at', { ascending: false }),
     supabase.from('lead_generators').select('*').eq('status', 'pending').order('created_at', { ascending: true }),
-    supabase.from('lg_payouts').select('*').eq('status', 'pending').order('billing_month', { ascending: false }),
+    supabase.from('lg_payouts').select('*').eq('status', 'pending').order('period_start', { ascending: false }),
   ])
 
   // Get referral counts per LG

@@ -1,8 +1,15 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
 import { getPreviousBillingMonth } from '@/lib/usage-tracker'
 
 export const maxDuration = 300
+
+function admin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+}
 
 export async function GET(request: Request) {
   const auth = request.headers.get('authorization')
@@ -10,70 +17,43 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const db = admin()
   const lastMonth = getPreviousBillingMonth()
+  const periodStart = `${lastMonth}-01`
+  const periodEnd   = new Date(new Date(periodStart).getFullYear(), new Date(periodStart).getMonth() + 1, 0)
+    .toISOString().slice(0, 10)
 
-  const { data: lgs } = await supabase
-    .from('lead_generators')
-    .select('id, minimum_payout')
-    .eq('status', 'active')
-
+  const { data: lgs } = await db.from('lead_generators').select('id').eq('status', 'active')
   let generated = 0
 
   for (const lg of lgs || []) {
-    // Skip if payout already exists for this month
-    const { data: existing } = await supabase
-      .from('lg_payouts')
+    // Skip if payout already exists for this period
+    const { data: existing } = await db.from('lg_payouts')
       .select('id')
       .eq('lg_id', lg.id)
-      .eq('billing_month', lastMonth)
+      .eq('period_start', periodStart)
       .maybeSingle()
-
     if (existing) continue
 
-    const { data: earnings } = await supabase
-      .from('lg_earnings')
-      .select('amount, product_count, va_id')
+    // Sum earnings for last month
+    const { data: earnings } = await db.from('lg_earnings')
+      .select('amount')
       .eq('lg_id', lg.id)
       .eq('billing_month', lastMonth)
 
-    const totalEarnings  = (earnings || []).reduce((s, r) => s + parseFloat(String(r.amount)), 0)
-    const totalProducts  = (earnings || []).reduce((s, r) => s + r.product_count, 0)
-    const uniqueVAs      = new Set((earnings || []).map(r => r.va_id)).size
+    const totalEarnings = (earnings || []).reduce((s, r) => s + parseFloat(String(r.amount)), 0)
+    if (totalEarnings < 10) continue  // below minimum payout threshold
 
-    // Add any previously rolled-over amounts
-    const { data: rolledPayouts } = await supabase
-      .from('lg_payouts')
-      .select('rolled_over')
-      .eq('lg_id', lg.id)
-      .eq('status', 'rolled_over')
-
-    const prevRolled   = (rolledPayouts || []).reduce((s, r) => s + parseFloat(String(r.rolled_over)), 0)
-    const grandTotal   = totalEarnings + prevRolled
-    const minPayout    = parseFloat(String(lg.minimum_payout))
-    const meetsMinimum = grandTotal >= minPayout
-
-    await supabase.from('lg_payouts').insert({
-      lg_id:             lg.id,
-      billing_month:     lastMonth,
-      total_earnings:    totalEarnings,
-      payout_amount:     meetsMinimum ? grandTotal : 0,
-      rolled_over:       meetsMinimum ? 0 : grandTotal,
-      total_products:    totalProducts,
-      total_active_vas:  uniqueVAs,
-      status:            meetsMinimum ? 'pending' : 'rolled_over',
+    await db.from('lg_payouts').insert({
+      lg_id:        lg.id,
+      amount:       totalEarnings,
+      period_start: periodStart,
+      period_end:   periodEnd,
+      status:       'pending',
     })
 
-    // If paying out, mark old rolled_over payouts as included
-    if (meetsMinimum && rolledPayouts && rolledPayouts.length > 0) {
-      await supabase
-        .from('lg_payouts')
-        .update({ status: 'paid', notes: 'Included in later payout', updated_at: new Date().toISOString() })
-        .eq('lg_id', lg.id)
-        .eq('status', 'rolled_over')
-    }
-
     generated++
-    console.log(`[genx-payout] ${lg.id} | $${totalEarnings.toFixed(2)} earned | ${meetsMinimum ? 'PAYOUT' : 'ROLLED OVER'} | $${grandTotal.toFixed(2)}`)
+    console.log(`[genx-payout] ${lg.id} | $${totalEarnings.toFixed(2)} | PENDING`)
   }
 
   return NextResponse.json({ ok: true, generated, billing_month: lastMonth })

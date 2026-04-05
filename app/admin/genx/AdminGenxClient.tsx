@@ -3,10 +3,10 @@ import { useState } from 'react'
 
 type LG = {
   id: string; display_name: string; email: string | null; login_code: string
-  referral_code: string; status: string; total_earnings: number; total_referred: number
-  active_referred: number; referral_count: number; created_at: string; approved_at: string | null
+  referral_code: string; status: string; total_earned: number; total_vas: number
+  active_vas: number; referral_count: number; created_at: string | null; approved_at: string | null
 }
-type Payout = { id: string; lg_id: string; billing_month: string; payout_amount: number; status: string }
+type Payout = { id: string; lg_id: string; period_start: string; amount: number; status: string }
 
 const STATUS_COLORS: Record<string, string> = {
   active: '#22C55E', pending: '#F59E0B', paused: '#888888', deactivated: '#EF4444'
@@ -18,8 +18,8 @@ export default function AdminGenxClient({ lgs, pendingPayouts }: { lgs: LG[]; pe
 
   const totalActive = lgs.filter(l => l.status === 'active').length
   const totalPending = lgs.filter(l => l.status === 'pending').length
-  const totalEarnings = lgs.reduce((s, l) => s + parseFloat(String(l.total_earnings || 0)), 0)
-  const totalVAs = lgs.reduce((s, l) => s + (l.total_referred || 0), 0)
+  const totalEarnings = lgs.reduce((s, l) => s + parseFloat(String(l.total_earned || 0)), 0)
+  const totalVAs = lgs.reduce((s, l) => s + (l.total_vas || 0), 0)
 
   async function action(lgId: string, type: 'approve' | 'pause' | 'deactivate') {
     setLoading(lgId + type)
@@ -73,10 +73,10 @@ export default function AdminGenxClient({ lgs, pendingPayouts }: { lgs: LG[]; pe
                 <div key={p.id} style={{ padding: '16px 20px', borderBottom: i < pendingPayouts.length - 1 ? '1px solid #F0F0F0' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <div style={{ fontWeight: 600 }}>{lg?.display_name || p.lg_id}</div>
-                    <div style={{ fontSize: 12, color: '#86868B' }}>{p.billing_month}</div>
+                    <div style={{ fontSize: 12, color: '#86868B' }}>{p.period_start}</div>
                   </div>
                   <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                    <span style={{ fontSize: 18, fontWeight: 700, color: '#22C55E' }}>${parseFloat(String(p.payout_amount)).toFixed(2)}</span>
+                    <span style={{ fontSize: 18, fontWeight: 700, color: '#22C55E' }}>${parseFloat(String(p.amount)).toFixed(2)}</span>
                     <input
                       placeholder="Reference"
                       value={payRef[p.id] || ''}
@@ -112,7 +112,7 @@ export default function AdminGenxClient({ lgs, pendingPayouts }: { lgs: LG[]; pe
                   {lg.email} · Code: <strong>{lg.login_code}</strong> · Ref: {lg.referral_code}
                 </div>
                 <div style={{ fontSize: 12, color: '#86868B', marginTop: 4 }}>
-                  {lg.total_referred} referred · {lg.active_referred} active · ${parseFloat(String(lg.total_earnings || 0)).toFixed(2)} lifetime
+                  {lg.total_vas} referred · {lg.active_vas} active · ${parseFloat(String(lg.total_earned || 0)).toFixed(2)} lifetime
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>

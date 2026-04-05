@@ -10,23 +10,20 @@ export default async function PayoutsPage() {
   const lgId = session.lgId
   const currentMonth = getCurrentBillingMonth()
 
-  const [lgRes, currentEarningsRes, payoutsRes, leaderboardRes] = await Promise.all([
-    supabase.from('lead_generators').select('payout_method, minimum_payout').eq('id', lgId).single(),
+  const [currentEarningsRes, payoutsRes, myLBRes] = await Promise.all([
     supabase.from('lg_earnings').select('amount').eq('lg_id', lgId).eq('billing_month', currentMonth),
-    supabase.from('lg_payouts').select('*').eq('lg_id', lgId).order('billing_month', { ascending: false }).limit(12),
-    supabase.from('lg_leaderboard').select('rank_earnings, active_vas, earnings, new_signups').eq('lg_id', lgId).eq('period_type', 'month').eq('period', currentMonth).single(),
+    supabase.from('lg_payouts').select('*').eq('lg_id', lgId).order('created_at', { ascending: false }).limit(12),
+    supabase.from('lg_leaderboard').select('rank, active_vas, total_earned').eq('lg_id', lgId).eq('billing_month', currentMonth).single(),
   ])
 
-  // Get all LGs' leaderboard for current month (for ranking context)
   const { data: allLBRows } = await supabase
     .from('lg_leaderboard')
-    .select('lg_id, active_vas, earnings, rank_earnings')
-    .eq('period_type', 'month')
-    .eq('period', currentMonth)
-    .order('earnings', { ascending: false })
+    .select('lg_id, active_vas, total_earned, rank')
+    .eq('billing_month', currentMonth)
+    .order('rank', { ascending: true })
 
-  const pending = (currentEarningsRes.data || []).reduce((s, r) => s + parseFloat(String(r.amount)), 0)
-  const myRank = (leaderboardRes.data?.rank_earnings as number) || null
+  const pending  = (currentEarningsRes.data || []).reduce((s, r) => s + parseFloat(String(r.amount)), 0)
+  const myRank   = (myLBRes.data?.rank as number) || null
   const totalLGs = (allLBRows || []).length
 
   return (
@@ -38,8 +35,6 @@ export default async function PayoutsPage() {
       myLgId={lgId}
       myRank={myRank}
       totalLGs={totalLGs}
-      payoutMethod={lgRes.data?.payout_method as Record<string,string>|null}
-      minimumPayout={parseFloat(String(lgRes.data?.minimum_payout || 10))}
     />
   )
 }

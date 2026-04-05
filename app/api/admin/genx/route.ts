@@ -26,7 +26,7 @@ export async function GET() {
   const [lgsRes, earningsRes, payoutsRes] = await Promise.all([
     supabase.from('lead_generators').select('*').order('created_at', { ascending: false }),
     supabase.from('lg_earnings').select('lg_id, amount').eq('billing_month', currentMonth),
-    supabase.from('lg_payouts').select('lg_id, payout_amount').eq('status', 'pending'),
+    supabase.from('lg_payouts').select('lg_id, amount').eq('status', 'pending'),
   ])
 
   const lgs     = lgsRes.data || []
@@ -37,7 +37,7 @@ export async function GET() {
     earningsMap[e.lg_id as string] = (earningsMap[e.lg_id as string] || 0) + parseFloat(String(e.amount))
   }
   for (const p of payoutsRes.data || []) {
-    payoutMap[p.lg_id as string] = (payoutMap[p.lg_id as string] || 0) + parseFloat(String(p.payout_amount))
+    payoutMap[p.lg_id as string] = (payoutMap[p.lg_id as string] || 0) + parseFloat(String(p.amount))
   }
 
   const enriched = lgs.map(lg => ({
