@@ -18,17 +18,17 @@ export default async function PulsePage() {
       .order('created_at', { ascending: false })
       .limit(50),
     supabase.from('lg_pulse_events')
-      .select('event_type, product_count, earning_amount, va_id')
+      .select('type, payload')
       .eq('lg_id', lgId)
       .gte('created_at', todayStart.toISOString()),
   ])
 
   const today = todayRes.data || []
   const todayStats = {
-    products: today.filter((e: Record<string, unknown>) => e.event_type === 'optimized').reduce((s, e: Record<string, unknown>) => s + ((e.product_count as number) || 0), 0),
-    earnings: today.filter((e: Record<string, unknown>) => e.event_type === 'optimized').reduce((s, e: Record<string, unknown>) => s + parseFloat(String(e.earning_amount || 0)), 0),
-    signups:  today.filter((e: Record<string, unknown>) => e.event_type === 'signup').length,
-    activeVAs:new Set(today.filter((e: Record<string, unknown>) => e.event_type === 'optimized').map((e: Record<string, unknown>) => e.va_id)).size,
+    products:  today.filter((e: Record<string, unknown>) => e.type === 'upload').reduce((s, e: Record<string, unknown>) => s + (((e.payload as Record<string,unknown>)?.products as number) || 0), 0),
+    earnings:  today.filter((e: Record<string, unknown>) => e.type === 'upload').reduce((s, e: Record<string, unknown>) => s + parseFloat(String(((e.payload as Record<string,unknown>)?.amount) || 0)), 0),
+    signups:   today.filter((e: Record<string, unknown>) => e.type === 'signup').length,
+    activeVAs: new Set(today.filter((e: Record<string, unknown>) => e.type === 'upload').map((e: Record<string, unknown>) => (e.payload as Record<string,unknown>)?.va_id)).size,
   }
 
   return (

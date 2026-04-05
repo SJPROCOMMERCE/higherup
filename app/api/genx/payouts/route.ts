@@ -11,8 +11,8 @@ export async function GET() {
 
   const [currentEarningsRes, payoutsRes, lgRes] = await Promise.all([
     supabase.from('lg_earnings').select('amount').eq('lg_id', lgId).eq('billing_month', currentMonth),
-    supabase.from('lg_payouts').select('*').eq('lg_id', lgId).order('billing_month', { ascending: false }).limit(12),
-    supabase.from('lead_generators').select('minimum_payout, total_earnings').eq('id', lgId).single(),
+    supabase.from('lg_payouts').select('*').eq('lg_id', lgId).order('created_at', { ascending: false }).limit(12),
+    supabase.from('lead_generators').select('total_earned, pending_payout').eq('id', lgId).single(),
   ])
 
   const pendingEarnings = (currentEarningsRes.data || [])
@@ -27,8 +27,8 @@ export async function GET() {
     pending_earnings: pendingEarnings,
     rolled_over:      rolledOver,
     pending_total:    pendingEarnings + rolledOver,
-    minimum_payout:   parseFloat(String(lgRes.data?.minimum_payout || 10)),
-    lifetime_earnings:parseFloat(String(lgRes.data?.total_earnings || 0)),
+    minimum_payout:   10,
+    lifetime_earnings:parseFloat(String(lgRes.data?.total_earned || 0)),
     payouts:          payoutsRes.data || [],
   })
 }
