@@ -1,66 +1,79 @@
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+
+// Service role bypasses RLS — required since the VA inserting is not an LG
+function admin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+}
 
 export async function POST(request: Request) {
   const { va_id, referral_code } = await request.json() as { va_id?: string; referral_code?: string }
   if (!va_id || !referral_code) return Response.json({ error: 'Missing fields' }, { status: 400 })
 
-  // Find the LG
-  const { data: lg } = await supabase
+  const db = admin()
+  const code = referral_code.trim().toLowerCase()
+
+  // Find active LG by referral code (stored lowercase)
+  const { data: lg } = await db
     .from('lead_generators')
-    .select('id')
-    .eq('referral_code', referral_code.trim().toUpperCase())
+    .select('id, display_name, total_vas')
+    .eq('referral_code', code)
     .eq('status', 'active')
     .single()
 
   if (!lg) return Response.json({ error: 'Invalid referral code' }, { status: 404 })
 
-  // Check VA isn't already linked
-  const { data: existing } = await supabase
+  // Idempotent: skip if VA already linked
+  const { data: existing } = await db
     .from('referral_tracking')
     .select('id')
-    .eq('va_id', va_id)
+    .eq('va_user_id', va_id)
     .maybeSingle()
 
   if (existing) return Response.json({ ok: true, note: 'Already linked' })
 
-  // Get VA name
-  const { data: va } = await supabase.from('vas').select('name').eq('id', va_id).single()
+  // Get VA name for pulse event
+  const { data: va } = await db.from('vas').select('name').eq('id', va_id).single()
   const vaName = (va as { name?: string } | null)?.name || 'New VA'
 
-  // Create referral link
-  await supabase.from('referral_tracking').insert({
-    lg_id:              lg.id,
-    va_id,
-    referral_code_used: referral_code.trim().toUpperCase(),
-    status:             'signed_up',
+  // Link VA → LG
+  const { error: insertErr } = await db.from('referral_tracking').insert({
+    lg_id:      lg.id,
+    va_user_id: va_id,
+    source:     'direct',
+    status:     'active',
   })
 
-  // Increment LG total_referred
-  await supabase
-    .from('lead_generators')
-    .update({ total_referred: supabase.rpc('increment_lg_earnings', { lg_id_input: lg.id, amount_input: 0 }) as never })
+  if (insertErr) {
+    console.error('[genx] referral_tracking insert failed:', insertErr.message)
+    return Response.json({ error: insertErr.message }, { status: 500 })
+  }
 
-  // Use direct update with increment
-  const { data: lgRow } = await supabase
+  // Increment total_vas on LG
+  await db
     .from('lead_generators')
-    .select('total_referred')
-    .eq('id', lg.id)
-    .single()
-
-  await supabase
-    .from('lead_generators')
-    .update({ total_referred: ((lgRow?.total_referred as number) || 0) + 1, updated_at: new Date().toISOString() })
+    .update({ total_vas: ((lg.total_vas as number) || 0) + 1 })
     .eq('id', lg.id)
 
   // Pulse event
-  await supabase.from('lg_pulse_events').insert({
-    lg_id:           lg.id,
-    event_type:      'signup',
-    va_id,
-    va_display_name: vaName,
+  await db.from('lg_pulse_events').insert({
+    lg_id:   lg.id,
+    type:    'signup',
+    payload: { va_id, va_name: vaName },
   })
 
-  console.log(`[genx] referral | lg=${lg.id} | new VA=${va_id} | code=${referral_code}`)
+  // Action: activate new VA
+  await db.from('lg_actions').insert({
+    lg_id:      lg.id,
+    type:       'activate_new_va',
+    priority:   'high',
+    title:      `New VA signed up: ${vaName}`,
+    body:       'Help them submit their first upload to activate earnings.',
+    va_user_id: va_id,
+  })
 
+  console.log(`[genx] referral linked | lg=${lg.id} | va=${va_id} | code=${code}`)
   return Response.json({ ok: true })
 }
