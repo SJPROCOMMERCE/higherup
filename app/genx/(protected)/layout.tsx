@@ -10,7 +10,7 @@ export default async function GenxLayout({ children }: { children: React.ReactNo
   const { lg } = session
   const status = lg.status as string
 
-  if (status === 'pending') redirect('/genx/welcome')
+  // 'pending' status no longer blocks — all new LGs are created with status='active'
   if (status === 'deactivated') redirect('/dashboard')
 
   return (

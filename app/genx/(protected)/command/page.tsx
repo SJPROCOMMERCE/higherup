@@ -4,6 +4,7 @@ import { genxDb, toMonthDate } from '@/lib/genx-db'
 import { getCurrentBillingMonth, getPreviousBillingMonth } from '@/lib/usage-tracker'
 import ActionFeed from './ActionFeed'
 import WeeklyTargets from './WeeklyTargets'
+import WelcomeBanner from './WelcomeBanner'
 
 const S = {
   label: { fontSize: 11, fontWeight: 500, color: '#555555', textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 8, display: 'block' },
@@ -21,6 +22,13 @@ function prevMonth(m: string) {
 export default async function CommandPage() {
   const session = await getGenxSession()
   if (!session) redirect('/genx/login')
+
+  // Check for new LG (created within last 24h and 0 total_vas)
+  const lgJoinedAt = session.lg.joined_at as string | null
+  const isNewLG = lgJoinedAt
+    ? new Date(lgJoinedAt) > new Date(Date.now() - 24 * 60 * 60 * 1000)
+    : false
+
   const db = genxDb()
   const lgId = session.lgId
   const currentMonth = getCurrentBillingMonth()
@@ -58,6 +66,7 @@ export default async function CommandPage() {
   const healthScore   = Math.min(100, Math.round(activeRatio * 50 + Math.min(1, thisProducts / (activeCount * 200 || 1)) * 30 + 20))
   const weeklySignups = (signupsRes.data||[]).length
   const actions       = actionsRes.data || []
+  const showWelcome   = isNewLG && ((lgRes.data?.total_vas as number) || 0) === 0
 
   // Weekly activations: VAs whose FIRST completed upload happened in the last 7 days
   const lgVaIds = (allReferralsRes.data||[]).map((r: Record<string, unknown>) => r.va_user_id as string)
@@ -80,6 +89,14 @@ export default async function CommandPage() {
 
   return (
     <div style={{ maxWidth: 840 }}>
+      {/* Welcome banner for new LGs */}
+      {showWelcome && (
+        <WelcomeBanner
+          referralCode={session.lg.referral_code as string}
+          appUrl={process.env.NEXT_PUBLIC_APP_URL || 'https://higherup.me'}
+        />
+      )}
+
       {/* Lifetime */}
       <div style={{ marginBottom: 48 }}>
         <span style={S.label}>Lifetime Earnings</span>
