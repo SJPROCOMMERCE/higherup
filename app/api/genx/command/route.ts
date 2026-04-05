@@ -1,5 +1,5 @@
 import { getGenxSession } from '@/lib/genx-auth'
-import { supabase } from '@/lib/supabase'
+import { genxDb } from '@/lib/genx-db'
 import { getCurrentBillingMonth, getPreviousBillingMonth } from '@/lib/usage-tracker'
 
 function prevMonth(m: string): string {
@@ -9,6 +9,7 @@ function prevMonth(m: string): string {
 }
 
 export async function GET() {
+  const db = genxDb()
   const session = await getGenxSession()
   if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 })
   const lgId         = session.lgId
@@ -17,12 +18,12 @@ export async function GET() {
   const twoAgo       = prevMonth(lastMonth)
 
   const [lgRes, thisRes, lastRes, twoRes, activeRes, attentionRes] = await Promise.all([
-    supabase.from('lead_generators').select('total_earned, total_vas, active_vas').eq('id', lgId).single(),
-    supabase.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', currentMonth),
-    supabase.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', lastMonth),
-    supabase.from('lg_earnings').select('amount').eq('lg_id', lgId).eq('billing_month', twoAgo),
-    supabase.from('referral_tracking').select('id').eq('lg_id', lgId).eq('status', 'active'),
-    supabase.from('referral_tracking')
+    db.from('lead_generators').select('total_earned, total_vas, active_vas').eq('id', lgId).single(),
+    db.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', currentMonth),
+    db.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', lastMonth),
+    db.from('lg_earnings').select('amount').eq('lg_id', lgId).eq('billing_month', twoAgo),
+    db.from('referral_tracking').select('id').eq('lg_id', lgId).eq('status', 'active'),
+    db.from('referral_tracking')
       .select('va_user_id, status, referred_at')
       .eq('lg_id', lgId)
       .order('referred_at', { ascending: false })
@@ -62,7 +63,7 @@ export async function GET() {
   const vaIds = attention.map((r: Record<string, unknown>) => r.va_user_id as string)
   let vaNames: Record<string, string> = {}
   if (vaIds.length > 0) {
-    const { data: vas } = await supabase.from('vas').select('id, name').in('id', vaIds)
+    const { data: vas } = await db.from('vas').select('id, name').in('id', vaIds)
     vaNames = Object.fromEntries((vas || []).map(v => [v.id, v.name]))
   }
 

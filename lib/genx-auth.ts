@@ -1,6 +1,6 @@
 import crypto from 'crypto'
 import { cookies } from 'next/headers'
-import { supabase } from './supabase'
+import { genxDb } from './genx-db'
 
 const SESSION_COOKIE = 'genx_session'
 const SECRET = process.env.ADMIN_SESSION_SECRET || 'genx-fallback-secret'
@@ -34,7 +34,7 @@ export async function getGenxSession(): Promise<{ lgId: string; lg: Record<strin
     if (!raw) return null
     const lgId = verifySession(raw)
     if (!lgId) return null
-    const { data: lg } = await supabase
+    const { data: lg } = await genxDb()
       .from('lead_generators')
       .select('*')
       .eq('id', lgId)

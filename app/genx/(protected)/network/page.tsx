@@ -1,22 +1,23 @@
 import { redirect } from 'next/navigation'
 import { getGenxSession } from '@/lib/genx-auth'
-import { supabase } from '@/lib/supabase'
+import { genxDb } from '@/lib/genx-db'
 import { getCurrentBillingMonth } from '@/lib/usage-tracker'
 import NetworkClient from './NetworkClient'
 
 export default async function NetworkPage() {
   const session = await getGenxSession()
   if (!session) redirect('/genx/login')
+  const db = genxDb()
   const lgId = session.lgId
   const currentMonth = getCurrentBillingMonth()
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
   const [referralsRes, earningsRes] = await Promise.all([
-    supabase.from('referral_tracking')
+    db.from('referral_tracking')
       .select('id, va_user_id, referred_at, status, source')
       .eq('lg_id', lgId)
       .order('referred_at', { ascending: false }),
-    supabase.from('lg_earnings')
+    db.from('lg_earnings')
       .select('va_user_id, amount')
       .eq('lg_id', lgId)
       .eq('billing_month', currentMonth),
@@ -33,7 +34,7 @@ export default async function NetworkPage() {
   const vaIds = referrals.map(r => r.va_user_id as string)
   let vaNames: Record<string, string> = {}
   if (vaIds.length > 0) {
-    const { data: vas } = await supabase.from('vas').select('id, name').in('id', vaIds)
+    const { data: vas } = await db.from('vas').select('id, name').in('id', vaIds)
     vaNames = Object.fromEntries((vas || []).map(v => [v.id as string, v.name as string]))
   }
 

@@ -1,18 +1,19 @@
 import { getGenxSession } from '@/lib/genx-auth'
-import { supabase } from '@/lib/supabase'
+import { genxDb } from '@/lib/genx-db'
 import { getCurrentBillingMonth } from '@/lib/usage-tracker'
 
 export async function GET() {
+  const db = genxDb()
   const session = await getGenxSession()
   if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 })
   const lgId = session.lgId
 
   const [referralsRes, earningsRes] = await Promise.all([
-    supabase.from('referral_tracking')
+    db.from('referral_tracking')
       .select('va_user_id, referred_at, status, source')
       .eq('lg_id', lgId)
       .order('referred_at', { ascending: false }),
-    supabase.from('lg_earnings')
+    db.from('lg_earnings')
       .select('va_user_id, amount')
       .eq('lg_id', lgId)
       .eq('billing_month', getCurrentBillingMonth()),
@@ -31,7 +32,7 @@ export async function GET() {
   const vaIds = referrals.map((r: Record<string, unknown>) => r.va_user_id as string)
   let vaNames: Record<string, string> = {}
   if (vaIds.length > 0) {
-    const { data: vas } = await supabase.from('vas').select('id, name').in('id', vaIds)
+    const { data: vas } = await db.from('vas').select('id, name').in('id', vaIds)
     vaNames = Object.fromEntries((vas || []).map(v => [v.id, v.name]))
   }
 

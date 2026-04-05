@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getGenxSession } from '@/lib/genx-auth'
-import { supabase } from '@/lib/supabase'
+import { genxDb } from '@/lib/genx-db'
 import { getCurrentBillingMonth, getPreviousBillingMonth } from '@/lib/usage-tracker'
 import ActionFeed from './ActionFeed'
 import WeeklyTargets from './WeeklyTargets'
@@ -21,6 +21,7 @@ function prevMonth(m: string) {
 export default async function CommandPage() {
   const session = await getGenxSession()
   if (!session) redirect('/genx/login')
+  const db = genxDb()
   const lgId = session.lgId
   const currentMonth = getCurrentBillingMonth()
   const lastMonth = getPreviousBillingMonth()
@@ -28,13 +29,13 @@ export default async function CommandPage() {
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
   const [lgRes, thisRes, lastRes, twoRes, activeRes, actionsRes, signupsRes] = await Promise.all([
-    supabase.from('lead_generators').select('total_earned, total_vas, active_vas').eq('id', lgId).single(),
-    supabase.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', currentMonth),
-    supabase.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', lastMonth),
-    supabase.from('lg_earnings').select('amount').eq('lg_id', lgId).eq('billing_month', twoAgo),
-    supabase.from('referral_tracking').select('id').eq('lg_id', lgId).eq('status', 'active'),
-    supabase.from('lg_actions').select('*').eq('lg_id', lgId).eq('completed', false).eq('dismissed', false).order('priority', { ascending: false }).limit(10),
-    supabase.from('referral_tracking').select('id').eq('lg_id', lgId).gte('referred_at', weekAgo),
+    db.from('lead_generators').select('total_earned, total_vas, active_vas').eq('id', lgId).single(),
+    db.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', currentMonth),
+    db.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', lastMonth),
+    db.from('lg_earnings').select('amount').eq('lg_id', lgId).eq('billing_month', twoAgo),
+    db.from('referral_tracking').select('id').eq('lg_id', lgId).eq('status', 'active'),
+    db.from('lg_actions').select('*').eq('lg_id', lgId).eq('completed', false).eq('dismissed', false).order('priority', { ascending: false }).limit(10),
+    db.from('referral_tracking').select('id').eq('lg_id', lgId).gte('referred_at', weekAgo),
   ])
 
   const sumAmt  = (rows: {amount: unknown}[]) => (rows||[]).reduce((s,r) => s + parseFloat(String(r.amount)), 0)
