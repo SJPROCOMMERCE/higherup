@@ -28,7 +28,7 @@ export default async function CommandPage() {
   const twoAgo = prevMonth(lastMonth)
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-  const [lgRes, thisRes, lastRes, twoRes, activeRes, actionsRes, signupsRes] = await Promise.all([
+  const [lgRes, thisRes, lastRes, twoRes, activeRes, actionsRes, signupsRes, allReferralsRes] = await Promise.all([
     db.from('lead_generators').select('total_earned, total_vas, active_vas').eq('id', lgId).single(),
     db.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', toMonthDate(currentMonth)),
     db.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', toMonthDate(lastMonth)),
@@ -36,6 +36,8 @@ export default async function CommandPage() {
     db.from('referral_tracking').select('id').eq('lg_id', lgId).eq('status', 'active'),
     db.from('lg_actions').select('*').eq('lg_id', lgId).eq('completed', false).eq('dismissed', false).order('priority', { ascending: false }).limit(10),
     db.from('referral_tracking').select('id').eq('lg_id', lgId).gte('referred_at', weekAgo),
+    // All VA IDs for this LG — needed to compute activations from uploads
+    db.from('referral_tracking').select('va_user_id').eq('lg_id', lgId),
   ])
 
   const sumAmt  = (rows: {amount: unknown}[]) => (rows||[]).reduce((s,r) => s + parseFloat(String(r.amount)), 0)
@@ -56,6 +58,25 @@ export default async function CommandPage() {
   const healthScore   = Math.min(100, Math.round(activeRatio * 50 + Math.min(1, thisProducts / (activeCount * 200 || 1)) * 30 + 20))
   const weeklySignups = (signupsRes.data||[]).length
   const actions       = actionsRes.data || []
+
+  // Weekly activations: VAs whose FIRST completed upload happened in the last 7 days
+  const lgVaIds = (allReferralsRes.data||[]).map((r: Record<string, unknown>) => r.va_user_id as string)
+  let weeklyActivations = 0
+  if (lgVaIds.length > 0) {
+    const { data: uploadsData } = await db
+      .from('uploads')
+      .select('va_id, processing_completed_at')
+      .in('va_id', lgVaIds)
+      .eq('status', 'done')
+    // Group by VA: find each VA's first upload date
+    const firstUpload: Record<string, string> = {}
+    for (const u of uploadsData || []) {
+      const vaId = u.va_id as string
+      const ts   = u.processing_completed_at as string
+      if (!firstUpload[vaId] || ts < firstUpload[vaId]) firstUpload[vaId] = ts
+    }
+    weeklyActivations = Object.values(firstUpload).filter(ts => ts >= weekAgo).length
+  }
 
   return (
     <div style={{ maxWidth: 840 }}>
@@ -104,7 +125,7 @@ export default async function CommandPage() {
         <WeeklyTargets
           lgId={lgId}
           weeklySignups={weeklySignups}
-          weeklyActivations={0}
+          weeklyActivations={weeklyActivations}
           targetSignups={5}
           targetActivations={3}
         />
