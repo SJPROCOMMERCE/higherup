@@ -1,4 +1,3 @@
-import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { createInvite } from '@/lib/invite'
 
@@ -9,22 +8,22 @@ export async function GET(
   const { code } = await params
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://higherup.me'
 
-  // Set the GENX referral cookie so the signup form can link the VA to this LG
-  const cookieStore = await cookies()
-  cookieStore.set('genx_referral', code, {
-    httpOnly: false,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60,
-    path: '/',
-  })
-
   // Auto-create an invite so the VA can go through normal onboarding
+  let destination = '/join'
   try {
     const { token } = await createInvite(`GENX referral: ${code}`, code)
-    return NextResponse.redirect(new URL(`/join/${token}`, appUrl))
-  } catch {
-    // Fallback: if invite creation fails, redirect to generic join page
-    return NextResponse.redirect(new URL('/join', appUrl))
-  }
+    destination = `/join/${token}`
+  } catch { /* fall through to /join */ }
+
+  // Set cookie directly on the redirect response
+  // (cookieStore.set + NextResponse.redirect don't share headers)
+  const response = NextResponse.redirect(new URL(destination, appUrl))
+  response.cookies.set('genx_referral', code, {
+    httpOnly: false,
+    secure:   process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge:   7 * 24 * 60 * 60,
+    path:     '/',
+  })
+  return response
 }
