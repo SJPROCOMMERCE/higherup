@@ -18,8 +18,10 @@ export const maxDuration = 300
 
 const MAX_CONCURRENT       = 5
 const MAX_DAILY_VARIANTS   = 50_000
-const BATCH_SIZE           = 5    // small batches → Claude stays consistent across products
-const PARALLEL_BATCHES     = 1    // sequential — allows anchor product system
+const BATCH_SIZE           = 10   // 10 products/batch → 50 products = 5 batches ≈ 250s, well within 300s limit
+const PARALLEL_BATCHES     = 1    // sequential — required for anchor product system (batch 0 must complete first)
+const PARENTS_PER_CHUNK    = 50   // max parents processed per Vercel invocation (future-proofing for 200+ products)
+const CHUNK_BUDGET_MS      = 240_000 // 240s budget per invocation — leaves 60s buffer for CSV build + upload
 
 // Pricing: https://www.anthropic.com/pricing
 const COST_INPUT  = 3    / 1_000_000   // $3.00 per MTok
@@ -748,6 +750,41 @@ export async function runPipeline(uploadId: string): Promise<void> {
   const batchCount  = Math.ceil(parentProductRows.length / BATCH_SIZE)
   const roundCount  = Math.ceil(batchCount / PARALLEL_BATCHES)
 
+  // ── Checkpoint: load partial results if this is a resumed chunk ───────────
+  // anchorText is declared here so it can be restored from checkpoint before the round loop
+  let anchorText           = ''
+  const checkpointPath     = `checkpoints/${uploadId}.json`
+  let checkpointStartBatch = 0
+
+  try {
+    const { data: cpBlob } = await supabase.storage.from('uploads').download(checkpointPath)
+    if (cpBlob) {
+      const cp = JSON.parse(await cpBlob.text()) as {
+        completedBatches: number
+        anchorText: string
+        parentResults: Record<string, OptResult>
+        totalInput: number; totalOutput: number; totalCached: number
+        apiCallsCount: number; batchesCompleted: number; batchesFailed: number
+      }
+      checkpointStartBatch = cp.completedBatches
+      anchorText           = cp.anchorText || ''
+      totalInput           = cp.totalInput   || 0
+      totalOutput          = cp.totalOutput  || 0
+      totalCached          = cp.totalCached  || 0
+      apiCallsCount        = cp.apiCallsCount    || 0
+      batchesCompleted     = cp.batchesCompleted || 0
+      batchesFailed        = cp.batchesFailed    || 0
+      for (const [idx, result] of Object.entries(cp.parentResults)) {
+        parentResults[parseInt(idx)] = result
+      }
+      console.log(`[process-upload] resumed from checkpoint: startBatch=${checkpointStartBatch} anchor=${anchorText.length > 0} restoredResults=${Object.keys(cp.parentResults).length}`)
+    }
+  } catch {
+    // No checkpoint — fresh start
+  }
+
+  const chunkStartTime = Date.now()
+
   // Helper: one API call with retry
   async function callClaude(batchIdx: number, batchSlice: ProductRow[], anchorText?: string, correctionPrefix?: string): Promise<{
     batchIdx: number
@@ -817,16 +854,26 @@ export async function runPipeline(uploadId: string): Promise<void> {
   }
 
   // Anchor: after batch 0, inject first 2 input→output examples into all subsequent batches
-  let anchorText = ''
+  // (anchorText declared above — may be pre-loaded from checkpoint on resume)
 
   // Process in sequential rounds (PARALLEL_BATCHES=1 → one batch per round)
+  let chunkedEarly = false  // set to true if we hit time budget and save checkpoint
   for (let round = 0; round < roundCount; round++) {
     const promises: ReturnType<typeof callClaude>[] = []
     for (let i = 0; i < PARALLEL_BATCHES; i++) {
       const b = round * PARALLEL_BATCHES + i
       if (b >= batchCount) break
+      // Skip batches already completed in a previous chunk
+      if (b < checkpointStartBatch) {
+        console.log(`[process-upload] skipping batch ${b} (already processed in previous chunk)`)
+        continue
+      }
       const batchSlice = parentProductRows.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE)
       promises.push(callClaude(b, batchSlice, b > 0 ? anchorText : undefined))
+    }
+    if (promises.length === 0) {
+      console.log(`[process-upload] round ${round + 1}/${roundCount} skipped (checkpoint)`)
+      continue
     }
 
     const roundResults = await Promise.all(promises)
@@ -983,7 +1030,53 @@ export async function runPipeline(uploadId: string): Promise<void> {
     }
 
     console.log(`[process-upload] round ${round + 1}/${roundCount} done (${promises.length} batches)`)
+
+    // ── Time-budget guard: if we're approaching the Vercel limit, save checkpoint and requeue ──
+    const elapsed = Date.now() - chunkStartTime
+    const lastBatchThisRound = (round + 1) * PARALLEL_BATCHES - 1
+    const moreRoundsRemain   = (round + 1) < roundCount
+    if (elapsed > CHUNK_BUDGET_MS && moreRoundsRemain) {
+      const completedBatchCount = Math.min((round + 1) * PARALLEL_BATCHES, batchCount)
+      const completedResultsMap: Record<number, OptResult> = {}
+      for (let i = 0; i < parentResults.length; i++) {
+        if (parentResults[i] !== null) completedResultsMap[i] = parentResults[i]!
+      }
+      const checkpoint = {
+        completedBatches: completedBatchCount,
+        anchorText,
+        parentResults: completedResultsMap,
+        totalInput, totalOutput, totalCached,
+        apiCallsCount, batchesCompleted, batchesFailed,
+      }
+      try {
+        await supabase.storage.from('uploads').upload(
+          checkpointPath,
+          JSON.stringify(checkpoint),
+          { upsert: true, contentType: 'application/json' },
+        )
+        // Requeue so process-worker picks it up again
+        await supabase.from('uploads').update({
+          status:        'queued',
+          error_message: `Chunking: completed batches 0-${completedBatchCount - 1} of ${batchCount} (${Object.keys(completedResultsMap).length}/${parentProductRows.length} products). Resuming...`,
+        }).eq('id', uploadId)
+        console.log(`[process-upload] checkpoint saved (batch ${completedBatchCount}/${batchCount}), requeued upload ${uploadId}`)
+        void logActivity({ action: 'upload_chunk_saved', upload_id: uploadId, va_id: String(upload.va_id), source: 'system', details: `Chunk saved at batch ${completedBatchCount}/${batchCount}, elapsed ${Math.round(elapsed / 1000)}s`, metadata: { completed_batches: completedBatchCount, total_batches: batchCount, elapsed_ms: elapsed } })
+      } catch (cpErr) {
+        console.error('[process-upload] failed to save checkpoint:', cpErr)
+      }
+      chunkedEarly = true
+      break
+    }
+    void lastBatchThisRound // suppress unused var warning
   }
+
+  // If we chunked early, exit without building CSV (worker will resume)
+  if (chunkedEarly) return
+
+  // ── Checkpoint cleanup: delete checkpoint file now that all batches are done ──
+  try {
+    await supabase.storage.from('uploads').remove([checkpointPath])
+  } catch { /* no-op if file didn't exist */ }
 
   // Build per-variant results: copy parent result to all its variants
   const parentResultByRowIdx = new Map<number, OptResult | null>()
