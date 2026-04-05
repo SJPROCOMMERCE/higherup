@@ -11,7 +11,7 @@ function admin() {
 
 export async function processLGEarnings(
   vaId: string,
-  usageId: string | null,
+  _usageId: string | null,  // kept for signature compatibility, not stored (column removed in schema v2)
   productCount: number,
   billingMonth: string
 ): Promise<{ lgId: string; amount: number } | null> {
@@ -30,11 +30,10 @@ export async function processLGEarnings(
     const lgId   = referral.lg_id as string
     const amount = Math.round(productCount * LG_EARNING_RATE * 100) / 100
 
-    // Insert earning record
+    // Insert earning record (schema v2: no usage_id column)
     const { error: earnError } = await db.from('lg_earnings').insert({
       lg_id:         lgId,
       va_user_id:    vaId,
-      usage_id:      usageId,
       billing_month: billingMonth,
       products:      productCount,
       amount,
