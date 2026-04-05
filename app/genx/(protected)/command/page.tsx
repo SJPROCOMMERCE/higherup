@@ -27,38 +27,34 @@ export default async function CommandPage() {
   const twoAgo = prevMonth(lastMonth)
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-  const [lgRes, thisRes, lastRes, twoRes, activeRes, actionsRes, signupsRes, activationsRes] = await Promise.all([
-    supabase.from('lead_generators').select('total_earnings, total_referred, weekly_target_signups, weekly_target_activations').eq('id', lgId).single(),
-    supabase.from('lg_earnings').select('amount, product_count').eq('lg_id', lgId).eq('billing_month', currentMonth),
-    supabase.from('lg_earnings').select('amount, product_count').eq('lg_id', lgId).eq('billing_month', lastMonth),
+  const [lgRes, thisRes, lastRes, twoRes, activeRes, actionsRes, signupsRes] = await Promise.all([
+    supabase.from('lead_generators').select('total_earned, total_vas, active_vas').eq('id', lgId).single(),
+    supabase.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', currentMonth),
+    supabase.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', lastMonth),
     supabase.from('lg_earnings').select('amount').eq('lg_id', lgId).eq('billing_month', twoAgo),
-    supabase.from('referral_tracking').select('id').eq('lg_id', lgId).in('status', ['active', 'slow']),
-    supabase.from('lg_actions').select('*').eq('lg_id', lgId).eq('status', 'pending').order('priority', { ascending: false }).limit(10),
-    supabase.from('referral_tracking').select('id').eq('lg_id', lgId).gte('signed_up_at', weekAgo),
-    supabase.from('referral_tracking').select('id').eq('lg_id', lgId).gte('first_upload_at', weekAgo),
+    supabase.from('referral_tracking').select('id').eq('lg_id', lgId).eq('status', 'active'),
+    supabase.from('lg_actions').select('*').eq('lg_id', lgId).eq('completed', false).eq('dismissed', false).order('priority', { ascending: false }).limit(10),
+    supabase.from('referral_tracking').select('id').eq('lg_id', lgId).gte('referred_at', weekAgo),
   ])
 
-  const sumAmt = (rows: {amount: unknown}[]) => (rows||[]).reduce((s,r) => s + parseFloat(String(r.amount)), 0)
-  const sumProd = (rows: {product_count: number}[]) => (rows||[]).reduce((s,r) => s + (r.product_count||0), 0)
+  const sumAmt  = (rows: {amount: unknown}[]) => (rows||[]).reduce((s,r) => s + parseFloat(String(r.amount)), 0)
+  const sumProd = (rows: {products: number}[]) => (rows||[]).reduce((s,r) => s + (r.products||0), 0)
 
-  const thisEarnings = sumAmt(thisRes.data || [])
-  const lastEarnings = sumAmt(lastRes.data || [])
-  const twoEarnings = sumAmt(twoRes.data || [])
-  const thisProducts = sumProd((thisRes.data||[]) as {product_count:number}[])
-  const lastProducts = sumProd((lastRes.data||[]) as {product_count:number}[])
-  const activeCount = (activeRes.data||[]).length
-  const total = (lgRes.data?.total_referred as number) || 0
-  const lifetime = parseFloat(String(lgRes.data?.total_earnings || 0))
-  const momGrowth = lastEarnings > 0 ? ((thisEarnings - lastEarnings) / lastEarnings * 100) : 0
-  const avgGrowth = (thisEarnings - twoEarnings) / 2
-  const projection = Math.max(0, thisEarnings + avgGrowth)
-  const activeRatio = total > 0 ? activeCount / total : 0
-  const healthScore = Math.min(100, Math.round(activeRatio * 50 + Math.min(1, thisProducts / (activeCount * 200 || 1)) * 30 + 20))
+  const thisEarnings  = sumAmt(thisRes.data || [])
+  const lastEarnings  = sumAmt(lastRes.data || [])
+  const twoEarnings   = sumAmt(twoRes.data || [])
+  const thisProducts  = sumProd((thisRes.data||[]) as {products:number}[])
+  const lastProducts  = sumProd((lastRes.data||[]) as {products:number}[])
+  const activeCount   = (activeRes.data||[]).length
+  const total         = (lgRes.data?.total_vas as number) || 0
+  const lifetime      = parseFloat(String(lgRes.data?.total_earned || 0))
+  const momGrowth     = lastEarnings > 0 ? ((thisEarnings - lastEarnings) / lastEarnings * 100) : 0
+  const avgGrowth     = (thisEarnings - twoEarnings) / 2
+  const projection    = Math.max(0, thisEarnings + avgGrowth)
+  const activeRatio   = total > 0 ? activeCount / total : 0
+  const healthScore   = Math.min(100, Math.round(activeRatio * 50 + Math.min(1, thisProducts / (activeCount * 200 || 1)) * 30 + 20))
   const weeklySignups = (signupsRes.data||[]).length
-  const weeklyActivations = (activationsRes.data||[]).length
-  const targetSignups = (lgRes.data?.weekly_target_signups as number) || 5
-  const targetActivations = (lgRes.data?.weekly_target_activations as number) || 3
-  const actions = actionsRes.data || []
+  const actions       = actionsRes.data || []
 
   return (
     <div style={{ maxWidth: 840 }}>
@@ -107,9 +103,9 @@ export default async function CommandPage() {
         <WeeklyTargets
           lgId={lgId}
           weeklySignups={weeklySignups}
-          weeklyActivations={weeklyActivations}
-          targetSignups={targetSignups}
-          targetActivations={targetActivations}
+          weeklyActivations={0}
+          targetSignups={5}
+          targetActivations={3}
         />
       </div>
 
