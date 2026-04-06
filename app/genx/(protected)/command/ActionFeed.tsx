@@ -17,16 +17,22 @@ export default function ActionFeed({ actions: initial }: { actions: Action[] }) 
 
   async function dismiss(id: string) {
     setLoading(id)
-    await fetch(`/api/genx/actions/${id}/dismiss`, { method: 'POST' })
-    setActions(prev => prev.filter(a => a.id !== id))
-    setLoading(null)
+    try {
+      const res = await fetch(`/api/genx/actions/${id}/dismiss`, { method: 'POST' })
+      if (res.ok) setActions(prev => prev.filter(a => a.id !== id))
+    } finally {
+      setLoading(null)
+    }
   }
 
   async function complete(id: string) {
     setLoading(id)
-    await fetch(`/api/genx/actions/${id}/complete`, { method: 'POST' })
-    setActions(prev => prev.filter(a => a.id !== id))
-    setLoading(null)
+    try {
+      const res = await fetch(`/api/genx/actions/${id}/complete`, { method: 'POST' })
+      if (res.ok) setActions(prev => prev.filter(a => a.id !== id))
+    } finally {
+      setLoading(null)
+    }
   }
 
   if (actions.length === 0) return null

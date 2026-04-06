@@ -36,7 +36,7 @@ export default async function CommandPage() {
   const twoAgo = prevMonth(lastMonth)
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-  const [lgRes, thisRes, lastRes, twoRes, activeRes, actionsRes, signupsRes, allReferralsRes] = await Promise.all([
+  const [lgRes, thisRes, lastRes, twoRes, activeRes, actionsRes, signupsRes, allReferralsRes, lifetimeRes] = await Promise.all([
     db.from('lead_generators').select('total_earned, total_vas, active_vas').eq('id', lgId).single(),
     db.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', toMonthDate(currentMonth)),
     db.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', toMonthDate(lastMonth)),
@@ -46,6 +46,8 @@ export default async function CommandPage() {
     db.from('referral_tracking').select('id').eq('lg_id', lgId).gte('referred_at', weekAgo),
     // All VA IDs for this LG — needed to compute activations from uploads
     db.from('referral_tracking').select('va_user_id').eq('lg_id', lgId),
+    // Lifetime earnings from actual records (more accurate than cached column)
+    db.from('lg_earnings').select('amount').eq('lg_id', lgId),
   ])
 
   const sumAmt  = (rows: {amount: unknown}[]) => (rows||[]).reduce((s,r) => s + parseFloat(String(r.amount)), 0)
@@ -57,8 +59,10 @@ export default async function CommandPage() {
   const thisProducts  = sumProd((thisRes.data||[]) as {products:number}[])
   const lastProducts  = sumProd((lastRes.data||[]) as {products:number}[])
   const activeCount   = (activeRes.data||[]).length
-  const total         = (lgRes.data?.total_vas as number) || 0
-  const lifetime      = parseFloat(String(lgRes.data?.total_earned || 0))
+  const total         = (allReferralsRes.data||[]).length
+  // Use sum of all lg_earnings records as lifetime; fall back to cached column if no records yet
+  const lifetimeFromRecords = sumAmt((lifetimeRes.data || []) as {amount: unknown}[])
+  const lifetime      = lifetimeFromRecords > 0 ? lifetimeFromRecords : parseFloat(String(lgRes.data?.total_earned || 0))
   const momGrowth     = lastEarnings > 0 ? ((thisEarnings - lastEarnings) / lastEarnings * 100) : 0
   const avgGrowth     = (thisEarnings - twoEarnings) / 2
   const projection    = Math.max(0, thisEarnings + avgGrowth)
