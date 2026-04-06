@@ -1,5 +1,5 @@
 'use client'
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 
 // ─── Types ────────────────────────────────────────────────────
 type DefaultScript = {
@@ -11,8 +11,9 @@ type CustomScript = {
   id: string; lg_id: string; category: string; channel: string
   title: string; content: string; notes: string | null
   is_modified_from: string | null; times_used: number
+  times_replied: number; times_converted: number
   conversion_note: string | null; is_pinned: boolean
-  created_at: string
+  sort_order: number; updated_at: string; created_at: string
 }
 type Contact = {
   id: string; lg_id: string; name: string; channel: string; handle: string | null
@@ -295,6 +296,16 @@ function ScriptsTab({
     if (data.script) setMyScripts(prev => prev.map(s => s.id === script.id ? data.script : s))
   }
 
+  async function handleTrack(id: string, result: 'used' | 'reply' | 'convert') {
+    const res = await fetch(`/api/genx/toolkit/my-scripts/${id}/track`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ result }),
+    })
+    const data = await res.json()
+    if (data.script) setMyScripts(prev => prev.map(s => s.id === id ? data.script : s))
+  }
+
   const subTabStyle = (active: boolean): React.CSSProperties => ({
     padding: '6px 16px', fontSize: 12, fontWeight: 600,
     background: active ? C.text : 'transparent',
@@ -382,6 +393,7 @@ function ScriptsTab({
                   onEdit={s => setModal({ mode: 'edit', script: s })}
                   onDelete={handleDelete}
                   onPin={handlePin}
+                  onTrack={handleTrack}
                 />
               ))}
             </div>
@@ -448,11 +460,14 @@ function DefaultScriptCard({ item, onCopy, onCustomize }: {
   )
 }
 
-function CustomScriptCard({ script, onCopy, onEdit, onDelete, onPin }: {
+function CustomScriptCard({ script, onCopy, onEdit, onDelete, onPin, onTrack }: {
   script: CustomScript; onCopy: (s: CustomScript) => void; onEdit: (s: CustomScript) => void
   onDelete: (id: string) => void; onPin: (s: CustomScript) => void
+  onTrack: (id: string, result: 'used' | 'reply' | 'convert') => void
 }) {
   const [expanded, setExpanded] = useState(false)
+  const [showTrack, setShowTrack] = useState(false)
+  const replyRate = script.times_used > 0 ? Math.round((script.times_replied / script.times_used) * 100) : 0
   return (
     <div style={{ background: C.surface, border: `1px solid ${script.is_pinned ? C.border2 : C.border}`, borderRadius: 8, padding: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
@@ -480,12 +495,34 @@ function CustomScriptCard({ script, onCopy, onEdit, onDelete, onPin }: {
         )}
         <div style={{ ...labelStyle, marginTop: 6 }}>{expanded ? '▲ hide' : '▼ show full'}</div>
       </div>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <CopyBtn text={script.content} onCopy={() => onCopy(script)} />
         <Btn onClick={() => onEdit(script)}>Edit</Btn>
         <Btn onClick={() => onDelete(script.id)} style={{ color: '#666' }}>Delete</Btn>
-        {script.times_used > 0 && <span style={{ ...mono, fontSize: 11, color: C.dim, marginLeft: 6 }}>Used {script.times_used}×</span>}
+        <Btn onClick={() => setShowTrack(v => !v)} style={{ color: C.muted }}>Track</Btn>
+        {script.times_used > 0 && (
+          <span style={{ ...mono, fontSize: 11, color: C.dim, marginLeft: 4 }}>
+            Used {script.times_used}× · {script.times_replied} replies
+            {replyRate > 0 && ` · ${replyRate}%`}
+            {script.times_converted > 0 && ` · ${script.times_converted} converts`}
+          </span>
+        )}
       </div>
+      {showTrack && (
+        <div style={{ marginTop: 10, padding: '10px 12px', background: '#0D0D0D', border: `1px solid ${C.border}`, borderRadius: 6, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ ...labelStyle }}>Log result:</span>
+          {[
+            { result: 'used' as const, label: 'No response' },
+            { result: 'reply' as const, label: 'Got a reply' },
+            { result: 'convert' as const, label: 'They signed up' },
+          ].map(opt => (
+            <Btn key={opt.result} onClick={() => { onTrack(script.id, opt.result); setShowTrack(false) }} variant={opt.result === 'convert' ? 'green' : 'default'}>
+              {opt.label}
+            </Btn>
+          ))}
+          <button onClick={() => setShowTrack(false)} style={{ background: 'transparent', border: 'none', color: C.dim, cursor: 'pointer', fontSize: 12 }}>cancel</button>
+        </div>
+      )}
     </div>
   )
 }
@@ -588,10 +625,13 @@ function PipelineTab({
     if (activities[contactId] || loadingActivities[contactId]) return
     setLoadingActivities(prev => ({ ...prev, [contactId]: true }))
     try {
-      const res = await fetch(`/api/genx/toolkit/contacts/${contactId}/activity`, { method: 'GET' }).catch(() => null)
-      // No GET on activity — fetch from contacts/:id directly isn't available yet
-      // We'll show empty for now and rely on logged activities
-      setActivities(prev => ({ ...prev, [contactId]: [] }))
+      const res = await fetch(`/api/genx/toolkit/contacts/${contactId}/activity`).catch(() => null)
+      if (res?.ok) {
+        const data = await res.json()
+        setActivities(prev => ({ ...prev, [contactId]: data.activities || [] }))
+      } else {
+        setActivities(prev => ({ ...prev, [contactId]: [] }))
+      }
     } finally {
       setLoadingActivities(prev => ({ ...prev, [contactId]: false }))
     }
@@ -740,6 +780,8 @@ function PipelineTab({
               key={contact.id}
               contact={contact}
               expanded={expandedId === contact.id}
+              activities={activities[contact.id] || []}
+              loadingActivities={loadingActivities[contact.id] || false}
               onToggle={() => toggleExpand(contact.id)}
               onUpdate={updates => updateContact(contact.id, updates)}
               onDelete={() => deleteContact(contact.id)}
@@ -760,9 +802,11 @@ function PipelineTab({
   )
 }
 
-function ContactRow({ contact, expanded, onToggle, onUpdate, onDelete, onLogActivity, onStar }: {
+function ContactRow({ contact, expanded, activities, loadingActivities, onToggle, onUpdate, onDelete, onLogActivity, onStar }: {
   contact: Contact
   expanded: boolean
+  activities: Activity[]
+  loadingActivities: boolean
   onToggle: () => void
   onUpdate: (updates: Partial<Contact>) => void
   onDelete: () => void
@@ -894,6 +938,26 @@ function ContactRow({ contact, expanded, onToggle, onUpdate, onDelete, onLogActi
                 ))}
               </div>
             </div>
+
+            {/* Timeline */}
+            {(activities.length > 0 || loadingActivities) && (
+              <div>
+                <div style={{ ...labelStyle, marginBottom: 8 }}>Timeline</div>
+                {loadingActivities ? (
+                  <div style={{ fontSize: 12, color: C.dim }}>Loading...</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {activities.slice(0, 8).map(act => (
+                      <div key={act.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 12, color: C.muted }}>
+                        <span style={{ color: C.dim, flexShrink: 0, ...mono, fontSize: 10 }}>{timeAgo(act.created_at)}</span>
+                        <span style={{ color: C.muted }}>{act.activity_type.replace(/_/g, ' ')}</span>
+                        {act.note && <span style={{ color: C.dim }}>— {act.note}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Action buttons */}
             <div style={{ display: 'flex', gap: 8, paddingTop: 4 }}>

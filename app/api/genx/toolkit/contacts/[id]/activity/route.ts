@@ -2,6 +2,25 @@ import { getGenxSession } from '@/lib/genx-auth'
 import { genxDb } from '@/lib/genx-db'
 import { NextRequest } from 'next/server'
 
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params
+  const session = await getGenxSession()
+  if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  const db = genxDb()
+  const { data, error } = await db
+    .from('lg_contact_activities')
+    .select('*')
+    .eq('contact_id', id)
+    .eq('lg_id', session.lgId)
+    .order('created_at', { ascending: false })
+    .limit(50)
+  if (error) return Response.json({ error: error.message }, { status: 500 })
+  return Response.json({ activities: data || [] })
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }

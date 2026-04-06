@@ -62,6 +62,9 @@ CREATE TABLE IF NOT EXISTS lg_referral_links (
 
 CREATE INDEX IF NOT EXISTS idx_reflinks_lg ON lg_referral_links(lg_id);
 
+-- ─── lg_custom_scripts: add times_replied (V2 addition) ──────
+ALTER TABLE lg_custom_scripts ADD COLUMN IF NOT EXISTS times_replied INTEGER DEFAULT 0;
+
 -- ─── genx_assets ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS genx_assets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
