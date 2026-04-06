@@ -239,16 +239,22 @@ function WeeklyPlanner({
   const [data, setData] = useState<DayData[]>(days)
   const TARGET_SIGNUPS = 5
 
-  async function increment(dayIndex: number, field: 'dms_sent' | 'posts_made' | 'followups_sent', delta: 1 | -1) {
-    const res = await fetch('/api/genx/toolkit/weekly', {
+  function increment(dayIndex: number, field: 'dms_sent' | 'posts_made' | 'followups_sent', delta: 1 | -1) {
+    // Optimistic: update UI onmiddellijk, geen wachten op server
+    setData(prev => prev.map((d, i) =>
+      i === dayIndex ? { ...d, [field]: Math.max(0, (d[field] as number) + delta) } : d
+    ))
+    // Fire-and-forget: sla op in achtergrond
+    fetch('/api/genx/toolkit/weekly', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ day_of_week: dayIndex, field, increment: delta }),
+    }).catch(() => {
+      // Bij fout: draai terug
+      setData(prev => prev.map((d, i) =>
+        i === dayIndex ? { ...d, [field]: Math.max(0, (d[field] as number) - delta) } : d
+      ))
     })
-    if (res.ok) {
-      const { new_value } = await res.json()
-      setData(prev => prev.map((d, i) => i === dayIndex ? { ...d, [field]: new_value } : d))
-    }
   }
 
   const totals = {
