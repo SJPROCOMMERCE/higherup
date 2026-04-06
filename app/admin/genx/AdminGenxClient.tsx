@@ -1,10 +1,11 @@
 'use client'
 import { useState } from 'react'
 
+// Kolom namen uit genx-schema.md — lead_generators heeft joined_at, NIET created_at
 type LG = {
   id: string; display_name: string; email: string | null; login_code: string
   referral_code: string; status: string; total_earned: number; total_vas: number
-  active_vas: number; referral_count: number; created_at: string | null; approved_at: string | null
+  active_vas: number; referral_count: number; joined_at: string | null
 }
 type Payout = { id: string; lg_id: string; period_start: string; amount: number; status: string }
 
