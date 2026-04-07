@@ -46,6 +46,10 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
   // Activity form
   const [actForm, setActForm] = useState({ activity_type: 'call', description: '' })
 
+  // Drag and drop state
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [dragOverStage, setDragOverStage] = useState<string | null>(null)
+
   const filtered = prospects.filter(p => {
     if (filterStage !== 'all' && p.stage !== filterStage) return false
     if (search) {
@@ -219,24 +223,68 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
         </div>
       )}
 
-      {/* Pipeline View */}
+      {/* Pipeline View — Drag & Drop Kanban */}
       {view === 'pipeline' && (
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${STAGES.filter(s => s.key !== 'lost').length}, 1fr)`, gap: 12 }}>
           {STAGES.filter(s => s.key !== 'lost').map(stage => {
             const items = filtered.filter(p => p.stage === stage.key)
+            const isOver = dragOverStage === stage.key
             return (
-              <div key={stage.key} style={{ background: S.surface, borderRadius: S.radius, border: `1px solid ${S.border}`, overflow: 'hidden' }}>
+              <div
+                key={stage.key}
+                onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+                onDragEnter={e => { e.preventDefault(); setDragOverStage(stage.key) }}
+                onDragLeave={e => {
+                  const rect = e.currentTarget.getBoundingClientRect()
+                  const { clientX, clientY } = e
+                  if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+                    setDragOverStage(null)
+                  }
+                }}
+                onDrop={e => {
+                  e.preventDefault()
+                  setDragOverStage(null)
+                  const prospectId = e.dataTransfer.getData('text/plain')
+                  const prospect = prospects.find(p => p.id === prospectId)
+                  if (prospect && prospect.stage !== stage.key) {
+                    updateStage(prospect, stage.key)
+                  }
+                  setDraggingId(null)
+                }}
+                style={{
+                  background: isOver ? `${stage.color}08` : S.surface,
+                  borderRadius: S.radius,
+                  border: isOver ? `2px solid ${stage.color}` : `1px solid ${S.border}`,
+                  overflow: 'hidden',
+                  transition: 'border 0.15s, background 0.15s',
+                  minHeight: 200,
+                }}
+              >
                 <div style={{ padding: '12px 14px', borderBottom: `2px solid ${stage.color}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: S.text }}>{stage.label}</span>
                   <span style={{ fontSize: 12, fontWeight: 600, color: stage.color, background: `${stage.color}15`, padding: '2px 8px', borderRadius: 10 }}>{items.length}</span>
                 </div>
                 <div style={{ padding: 8, maxHeight: 500, overflowY: 'auto' }}>
                   {items.map(p => (
-                    <div key={p.id} style={{
-                      background: S.bg, borderRadius: S.radiusSm, padding: '10px 12px', marginBottom: 8,
-                      border: `1px solid ${p.follow_up_date && p.follow_up_date <= today ? '#FBBF24' : S.borderLight}`,
-                      cursor: 'pointer',
-                    }} onClick={() => loadActivities(p.id)}>
+                    <div
+                      key={p.id}
+                      draggable
+                      onDragStart={e => {
+                        setDraggingId(p.id)
+                        e.dataTransfer.setData('text/plain', p.id)
+                        e.dataTransfer.effectAllowed = 'move'
+                      }}
+                      onDragEnd={() => { setDraggingId(null); setDragOverStage(null) }}
+                      onClick={() => loadActivities(p.id)}
+                      style={{
+                        background: S.bg, borderRadius: S.radiusSm, padding: '10px 12px', marginBottom: 8,
+                        border: `1px solid ${p.follow_up_date && p.follow_up_date <= today ? '#FBBF24' : S.borderLight}`,
+                        cursor: 'grab',
+                        opacity: draggingId === p.id ? 0.4 : 1,
+                        transition: 'opacity 0.15s, box-shadow 0.15s',
+                        boxShadow: draggingId === p.id ? 'none' : undefined,
+                      }}
+                    >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div style={{ fontSize: 13, fontWeight: 600, color: S.text }}>{p.name}</div>
                         <span style={{ fontSize: 10, fontWeight: 600, color: PRIORITY_COLORS[p.priority], textTransform: 'uppercase' }}>
@@ -250,25 +298,20 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
                           Follow-up: {p.follow_up_date}
                         </div>
                       )}
-                      {/* Stage transition buttons */}
-                      <div style={{ display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap' }}>
-                        {STAGES.filter(s => s.key !== p.stage).map(s => (
-                          <button
-                            key={s.key}
-                            onClick={(e) => { e.stopPropagation(); updateStage(p, s.key) }}
-                            style={{
-                              fontSize: 10, padding: '3px 8px', borderRadius: 4, cursor: 'pointer',
-                              border: `1px solid ${s.color}30`, background: `${s.color}10`, color: s.color, fontWeight: 500,
-                            }}
-                          >
-                            {s.label}
-                          </button>
-                        ))}
-                      </div>
+                      {p.admin_communities?.name && (
+                        <div style={{ fontSize: 10, color: S.accent, marginTop: 4 }}>{p.admin_communities.name}</div>
+                      )}
                     </div>
                   ))}
                   {items.length === 0 && (
-                    <div style={{ textAlign: 'center', padding: 20, color: S.textMuted, fontSize: 12 }}>Empty</div>
+                    <div style={{
+                      textAlign: 'center', padding: isOver ? 30 : 20, color: isOver ? stage.color : S.textMuted,
+                      fontSize: 12, fontWeight: isOver ? 600 : 400,
+                      border: isOver ? `2px dashed ${stage.color}40` : '2px dashed transparent',
+                      borderRadius: S.radiusSm, transition: 'all 0.15s',
+                    }}>
+                      {isOver ? `Drop here → ${stage.label}` : 'Empty'}
+                    </div>
                   )}
                 </div>
               </div>
