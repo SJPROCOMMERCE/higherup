@@ -9,8 +9,8 @@ import ScorecardTab from './tabs/ScorecardTab'
 // ── Shared types ──
 export type LG = {
   id: string; display_name: string; email: string | null; login_code: string
-  referral_code: string; status: string; total_earnings: number; total_referred: number
-  active_referred: number; created_at: string; approved_at: string | null
+  referral_code: string; status: string; total_earned: number; total_vas: number
+  active_vas: number; referral_count: number; joined_at: string | null
   onboarding_status: string | null; lg_tier: string | null; community_id: string | null
   recruiter_notes: string | null; last_active_at: string | null
 }
@@ -137,13 +137,7 @@ export default function AdminGenxClient({ lgs: initialLGs, prospects: initialPro
             dashboardData={dashboardData}
             lgs={lgs}
             pendingPayouts={pendingPayouts}
-            onRefresh={async () => {
-              const res = await fetch('/api/admin/genx/dashboard')
-              if (res.ok) {
-                // Dashboard data will refresh on page reload
-                window.location.reload()
-              }
-            }}
+            onRefresh={() => window.location.reload()}
           />
         )}
         {activeTab === 'prospects' && (

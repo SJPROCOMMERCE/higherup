@@ -109,7 +109,16 @@
       "Bash(grep -rn hu-dropdown-list --include=*.tsx /Users/safouaneelajjouri/Documents/HigherUp/app/ /Users/safouaneelajjouri/Documents/HigherUp/components/)",
       "Bash(head -3 grep -n \"T\\\\.bg\\\\|bg:\" /Users/safouaneelajjouri/Documents/HigherUp/app/admin/vas/page.tsx)",
       "Bash(head -3 grep -n \"T\\\\.bg\\\\|bg:\" /Users/safouaneelajjouri/Documents/HigherUp/app/admin/dashboard/page.tsx)",
-      "Bash(head -3 grep -n \"T\\\\.bg\\\\|bg:\" /Users/safouaneelajjouri/Documents/HigherUp/app/dashboard/upload/ManualEntry.tsx)"
+      "Bash(head -3 grep -n \"T\\\\.bg\\\\|bg:\" /Users/safouaneelajjouri/Documents/HigherUp/app/dashboard/upload/ManualEntry.tsx)",
+      "Bash(find /Users/safouaneelajjouri/Documents/HigherUp/.claude/worktrees/charming-nash -type f -path */app/admin/genx/* -o -path */app/api/admin/genx/*)",
+      "Bash(find /Users/safouaneelajjouri/Documents/HigherUp/.claude/worktrees/charming-nash -type f -name *.sql)",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:deepwiki.com)",
+      "WebFetch(domain:docs.twenty.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" which npm)",
+      "Bash(PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" which node)"
     ]
   }
 }

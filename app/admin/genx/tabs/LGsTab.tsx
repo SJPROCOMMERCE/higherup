@@ -160,7 +160,7 @@ export default function LGsTab({ lgs, communities, pendingPayouts, onUpdate }: P
                     {lg.email} · Code: <strong>{lg.login_code}</strong> · Ref: {lg.referral_code}
                   </div>
                   <div style={{ fontSize: 12, color: S.textSecondary, marginTop: 2 }}>
-                    {lg.total_referred || 0} referred · {lg.active_referred || 0} active · ${parseFloat(String(lg.total_earnings || 0)).toFixed(2)} lifetime
+                    {lg.total_vas || 0} referred · {lg.active_vas || 0} active · ${parseFloat(String(lg.total_earned || 0)).toFixed(2)} lifetime
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }} onClick={e => e.stopPropagation()}>

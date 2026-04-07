@@ -1,50 +1,94 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { genxDb, toMonthDate } from '@/lib/genx-db'
-import { getCurrentBillingMonth } from '@/lib/usage-tracker'
+import { createClient } from '@supabase/supabase-js'
 import AdminGenxClient from './AdminGenxClient'
+
+function adminDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
 export default async function AdminGenxPage() {
   const cookieStore = await cookies()
   const adminSession = cookieStore.get('admin_session')?.value
   if (!adminSession) redirect('/admin/login')
 
-  const db = genxDb()
-  const currentMonth = getCurrentBillingMonth()
+  const db = adminDb()
   const today = new Date().toISOString().slice(0, 10)
-  const weekAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
   const [
     lgsRes,
+    rtRes,
+    earningsRes,
+    payoutsRes,
     prospectsRes,
     communitiesRes,
     scorecardsRes,
-    payoutsRes,
-    earningsRes,
     recentActivityRes,
     todayScorecardRes,
   ] = await Promise.all([
-    db.from('lead_generators').select('*').order('created_at', { ascending: false }),
+    db.from('lead_generators')
+      .select('id, display_name, login_code, email, phone, status, referral_code, joined_at, source, onboarding_status, lg_tier, community_id, recruiter_notes, last_active_at')
+      .order('joined_at', { ascending: false }),
+    db.from('referral_tracking').select('lg_id, status'),
+    db.from('lg_earnings').select('lg_id, amount'),
+    db.from('lg_payouts').select('id, lg_id, period_start, amount, status').eq('status', 'pending').order('period_start', { ascending: false }),
     db.from('admin_prospects').select('*, admin_communities(name)').order('updated_at', { ascending: false }),
     db.from('admin_communities').select('*').order('created_at', { ascending: false }),
-    db.from('admin_daily_scorecard').select('*').gte('score_date', weekAgo).order('score_date', { ascending: false }),
-    db.from('lg_payouts').select('*').eq('status', 'pending').order('period_start', { ascending: false }),
-    db.from('lg_earnings').select('amount').eq('billing_month', toMonthDate(currentMonth)),
+    db.from('admin_daily_scorecard').select('*').gte('score_date', monthAgo).order('score_date', { ascending: false }),
     db.from('admin_prospect_activities').select('*, admin_prospects(name)').order('created_at', { ascending: false }).limit(20),
     db.from('admin_daily_scorecard').select('*').eq('score_date', today).maybeSingle(),
   ])
 
-  const lgs = lgsRes.data || []
+  // Build lookup maps
+  const totalVasMap:  Record<string, number> = {}
+  const activeVasMap: Record<string, number> = {}
+  const earnedMap:    Record<string, number> = {}
+
+  for (const r of rtRes.data || []) {
+    const id = r.lg_id as string
+    totalVasMap[id] = (totalVasMap[id] || 0) + 1
+    if ((r.status as string) === 'active') {
+      activeVasMap[id] = (activeVasMap[id] || 0) + 1
+    }
+  }
+  for (const e of earningsRes.data || []) {
+    const id = e.lg_id as string
+    earnedMap[id] = (earnedMap[id] || 0) + parseFloat(String(e.amount || 0))
+  }
+
+  const lgs = (lgsRes.data || []).map(lg => ({
+    id:                lg.id as string,
+    display_name:      lg.display_name as string,
+    login_code:        lg.login_code as string,
+    email:             (lg.email as string) || null,
+    status:            lg.status as string,
+    referral_code:     lg.referral_code as string,
+    joined_at:         (lg.joined_at as string) || null,
+    total_vas:         totalVasMap[lg.id as string]  || 0,
+    active_vas:        activeVasMap[lg.id as string] || 0,
+    total_earned:      Math.round((earnedMap[lg.id as string] || 0) * 100) / 100,
+    referral_count:    totalVasMap[lg.id as string]  || 0,
+    onboarding_status: (lg.onboarding_status as string) || null,
+    lg_tier:           (lg.lg_tier as string) || null,
+    community_id:      (lg.community_id as string) || null,
+    recruiter_notes:   (lg.recruiter_notes as string) || null,
+    last_active_at:    (lg.last_active_at as string) || null,
+  }))
+
   const prospects = prospectsRes.data || []
 
-  // Build pipeline counts
+  // Pipeline counts
   const stages = ['lead', 'contacted', 'interested', 'scheduled', 'converted', 'lost']
   const pipeline: Record<string, number> = {}
   for (const s of stages) pipeline[s] = 0
   for (const p of prospects) pipeline[p.stage as string] = (pipeline[p.stage as string] || 0) + 1
 
   // KPIs
-  const monthEarnings = (earningsRes.data || []).reduce((s, e) => s + parseFloat(String(e.amount)), 0)
+  const totalEarnings = Object.values(earnedMap).reduce((s, v) => s + v, 0)
   const pendingPayoutsAmount = (payoutsRes.data || []).reduce((s, p) => s + parseFloat(String(p.amount)), 0)
   const activeLGs = lgs.filter(l => l.status === 'active').length
   const pendingLGs = lgs.filter(l => l.status === 'pending').length
@@ -65,7 +109,7 @@ export default async function AdminGenxPage() {
       total_prospects: totalProspects,
       active_prospects: totalProspects - (pipeline['converted'] || 0) - (pipeline['lost'] || 0),
       conversion_rate: conversionRate,
-      month_earnings: monthEarnings,
+      month_earnings: totalEarnings,
       pending_payouts: pendingPayoutsAmount,
       overdue_follow_ups: overdue,
       high_priority: highPriority,
@@ -78,7 +122,7 @@ export default async function AdminGenxPage() {
 
   return (
     <AdminGenxClient
-      lgs={lgsRes.data || []}
+      lgs={lgs}
       prospects={prospectsRes.data || []}
       communities={communitiesRes.data || []}
       scorecards={scorecardsRes.data || []}
