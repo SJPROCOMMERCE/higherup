@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { S, type Community } from '../AdminGenxClient'
+import { S, type Community } from '../shared'
 
 const PLATFORMS = ['facebook', 'whatsapp', 'telegram', 'linkedin', 'discord', 'other']
 const STATUS_COLORS: Record<string, string> = {

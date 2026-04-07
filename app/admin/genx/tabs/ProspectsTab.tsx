@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { S, type Prospect, type Community } from '../AdminGenxClient'
+import { S, type Prospect, type Community } from '../shared'
 
 const STAGES = [
   { key: 'lead', label: 'Lead', color: '#6B7280' },
