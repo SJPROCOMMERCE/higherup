@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { S, PIPELINE_STAGES, TERMINAL_STAGES, type LG, type Payout, type ProspectActivity, type Scorecard, type ResponseSpeedData } from '../shared'
+import { S, PIPELINE_STAGES, TERMINAL_STAGES, LOSS_CATEGORY_COLORS, getLossReasonLabel, type LG, type Payout, type ProspectActivity, type Scorecard, type ResponseSpeedData, type LossAnalyticsData } from '../shared'
 
 type FunnelStep = {
   stage: string; count: number; reached: number
@@ -18,6 +18,15 @@ type FunnelResponse = {
 const STAGE_LOOKUP: Record<string, { label: string; color: string }> = {}
 for (const s of PIPELINE_STAGES) STAGE_LOOKUP[s.key] = { label: s.label, color: s.color }
 for (const s of TERMINAL_STAGES) STAGE_LOOKUP[s.key] = { label: s.label, color: s.color }
+
+// Map loss reason id → category for color lookup
+const LOSS_REASONS_CAT: Record<string, string> = {
+  wants_fixed_fee: 'pricing', thinks_scam: 'trust', thinks_mlm: 'trust',
+  no_network: 'qualification', no_time: 'commitment', no_reply_5plus: 'engagement',
+  no_reply_initial: 'engagement', uses_competitor: 'competition',
+  not_interested_listing: 'qualification', too_complicated: 'education',
+  bad_timing: 'timing', other: 'other',
+}
 
 function waitingColor(minutes: number): string {
   if (minutes < 60) return S.green
@@ -45,6 +54,7 @@ export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRef
   const [funnel, setFunnel] = useState<FunnelResponse | null>(null)
   const [funnelLoading, setFunnelLoading] = useState(true)
   const [speed, setSpeed] = useState<ResponseSpeedData | null>(null)
+  const [lossData, setLossData] = useState<LossAnalyticsData | null>(null)
 
   const kpis = dashboardData?.kpis || {}
   const pipeline = dashboardData?.pipeline || {}
@@ -57,9 +67,11 @@ export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRef
     Promise.all([
       fetch('/api/admin/genx/funnel').then(r => r.json()).catch(() => null),
       fetch('/api/admin/genx/analytics/response-speed').then(r => r.json()).catch(() => null),
-    ]).then(([funnelData, speedData]) => {
+      fetch('/api/admin/genx/analytics/loss-reasons').then(r => r.json()).catch(() => null),
+    ]).then(([funnelData, speedData, lossAnalytics]) => {
       setFunnel(funnelData)
       setSpeed(speedData)
+      setLossData(lossAnalytics)
       setFunnelLoading(false)
       if (speedData?.unreplied?.count != null) {
         onUnrepliedCount?.(speedData.unreplied.count)
@@ -453,6 +465,123 @@ export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRef
                 <div style={{ textAlign: 'center', padding: 24, color: S.textMuted, fontSize: 13 }}>No stuck prospects — pipeline is flowing well!</div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Loss Analysis ── */}
+      {lossData && lossData.total_lost > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>
+          {/* Loss Reasons Breakdown */}
+          <div style={{ background: S.surface, borderRadius: S.radius, padding: 20, border: `1px solid ${S.border}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, color: S.text, margin: 0 }}>Why Prospects Say No</h3>
+              <span style={{ fontSize: 11, color: S.textMuted }}>Last 30 days · {lossData.total_lost} lost</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+              {lossData.reasons.map((r, i) => {
+                const catColor = LOSS_CATEGORY_COLORS[LOSS_REASONS_CAT[r.reason] || 'other'] || S.textMuted
+                return (
+                  <div key={r.reason} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 140, fontSize: 12, color: i === 0 ? S.text : S.textSecondary, fontWeight: i === 0 ? 600 : 400 }}>{r.label}</div>
+                    <div style={{ width: 28, fontSize: 12, fontWeight: 600, color: catColor, textAlign: 'right' }}>{r.count}</div>
+                    <div style={{ flex: 1, height: 18, background: S.bg, borderRadius: 4, overflow: 'hidden', border: `1px solid ${S.borderLight}` }}>
+                      <div style={{ width: `${r.percentage}%`, height: '100%', background: catColor, borderRadius: 4, opacity: 0.7, transition: 'width 0.3s' }} />
+                    </div>
+                    <div style={{ width: 36, fontSize: 12, fontWeight: 700, color: catColor, textAlign: 'right' }}>{r.percentage}%</div>
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{ fontSize: 11, color: S.textMuted }}>
+              Avg {lossData.avg_days_in_pipeline} days in pipeline before loss
+            </div>
+            {/* Recommendations */}
+            {lossData.recommendations.length > 0 && (
+              <div style={{
+                marginTop: 12, background: S.yellowLight, borderLeft: `4px solid ${S.yellow}`,
+                borderRadius: `0 ${S.radiusSm}px ${S.radiusSm}px 0`, padding: '10px 14px',
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: S.yellow, marginBottom: 4 }}>RECOMMENDATION</div>
+                {lossData.recommendations.map((rec, i) => (
+                  <div key={i} style={{ fontSize: 12, color: S.text, lineHeight: 1.5, marginBottom: i < lossData.recommendations.length - 1 ? 6 : 0 }}>{rec}</div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Losses by Channel + Reactivation Due */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {/* By Channel */}
+            {Object.keys(lossData.by_channel).length > 0 && (
+              <div style={{ background: S.surface, borderRadius: S.radius, padding: 20, border: `1px solid ${S.border}` }}>
+                <h3 style={{ fontSize: 15, fontWeight: 600, color: S.text, margin: '0 0 12px' }}>Losses by Channel</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {Object.entries(lossData.by_channel)
+                    .sort(([, a], [, b]) => Object.values(b).reduce((s, v) => s + v, 0) - Object.values(a).reduce((s, v) => s + v, 0))
+                    .map(([channel, reasons]) => {
+                      const total = Object.values(reasons).reduce((s, v) => s + v, 0)
+                      const topEntry = Object.entries(reasons).sort(([, a], [, b]) => b - a)[0]
+                      const topPct = topEntry ? Math.round((topEntry[1] / total) * 100) : 0
+                      return (
+                        <div key={channel} style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          padding: '8px 12px', background: S.bg, borderRadius: S.radiusSm, border: `1px solid ${S.borderLight}`,
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 13, fontWeight: 500, color: S.text, textTransform: 'capitalize' }}>{channel}</span>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: S.red }}>{total} lost</span>
+                          </div>
+                          {topEntry && (
+                            <span style={{ fontSize: 11, color: S.textSecondary }}>
+                              Top: {getLossReasonLabel(topEntry[0])} ({topPct}%)
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })}
+                </div>
+              </div>
+            )}
+
+            {/* Reactivation Due */}
+            {lossData.reactivation_due.length > 0 && (
+              <div style={{ background: S.surface, borderRadius: S.radius, padding: 20, border: `1px solid ${S.border}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 600, color: S.text, margin: 0 }}>Reactivation Due</h3>
+                  <span style={{
+                    background: S.greenLight, color: S.green, padding: '3px 10px',
+                    borderRadius: 12, fontSize: 12, fontWeight: 700,
+                  }}>{lossData.reactivation_due.length} ready</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {lossData.reactivation_due.map(p => (
+                    <div key={p.id} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '8px 12px', background: S.bg, borderRadius: S.radiusSm, border: `1px solid ${S.borderLight}`,
+                    }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: S.text }}>{p.name}</div>
+                        <div style={{ fontSize: 11, color: S.textSecondary }}>
+                          {p.loss_reason_label} · {p.days_since_lost}d ago
+                          {p.times_lost > 1 && <span style={{ color: S.orange }}> · lost {p.times_lost}x</span>}
+                        </div>
+                      </div>
+                      <button onClick={async () => {
+                        await fetch(`/api/admin/genx/prospects/${p.id}`, {
+                          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ stage: 'identified', old_stage: 'lost', changed_by: 'admin' }),
+                        })
+                        onRefresh()
+                      }}
+                        style={{ background: S.green, color: '#fff', border: 'none', borderRadius: S.radiusSm, padding: '5px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                        Reactivate
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

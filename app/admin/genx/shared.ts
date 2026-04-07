@@ -53,6 +53,10 @@ export type Prospect = {
   // Response speed
   last_replied_at: string | null; our_response_at: string | null
   has_unreplied: boolean; last_response_time_minutes: number | null
+  // Loss reason tracking
+  loss_reason: string | null; loss_reason_detail: string | null
+  lost_at: string | null; lost_by: string | null
+  times_lost: number; revisit_at: string | null
 }
 export type Community = {
   id: string; name: string; platform: string; url: string | null
@@ -108,6 +112,54 @@ export type FunnelData = {
   overall_rate: number
   bottleneck: { stage: string; drop_off_percent: number; message: string } | null
   stuck: Record<string, number>
+}
+
+// ── Loss Reasons ──
+export const LOSS_REASONS = [
+  { id: 'wants_fixed_fee', label: 'Wants a fixed monthly fee', category: 'pricing', revisitDays: 60 },
+  { id: 'thinks_scam', label: 'Thinks it is a scam', category: 'trust', revisitDays: 90 },
+  { id: 'thinks_mlm', label: 'Thinks it is MLM', category: 'trust', revisitDays: 90 },
+  { id: 'no_network', label: 'Has no VA network', category: 'qualification', revisitDays: 0 },
+  { id: 'no_time', label: 'No time to recruit', category: 'commitment', revisitDays: 30 },
+  { id: 'no_reply_5plus', label: 'No reply after 5+ attempts', category: 'engagement', revisitDays: 60 },
+  { id: 'no_reply_initial', label: 'No reply to first message', category: 'engagement', revisitDays: 30 },
+  { id: 'uses_competitor', label: 'Already uses a competitor', category: 'competition', revisitDays: 90 },
+  { id: 'not_interested_listing', label: 'Not interested in listing work', category: 'qualification', revisitDays: 0 },
+  { id: 'too_complicated', label: 'Thinks it is too complicated', category: 'education', revisitDays: 30 },
+  { id: 'bad_timing', label: 'Bad timing (vacation, busy, personal)', category: 'timing', revisitDays: 14 },
+  { id: 'other', label: 'Other (specify below)', category: 'other', revisitDays: 30 },
+] as const
+
+export const LOSS_CATEGORY_COLORS: Record<string, string> = {
+  pricing: '#D97706', trust: '#DC2626', qualification: '#6B7280',
+  commitment: '#EA580C', engagement: '#2563EB', competition: '#7C3AED',
+  education: '#4F46E5', timing: '#059669', other: '#9CA3AF',
+}
+
+export function getLossReasonLabel(id: string): string {
+  return LOSS_REASONS.find(r => r.id === id)?.label || id
+}
+
+export type LossHistoryEntry = {
+  id: string; prospect_id: string; lost_at: string; lost_by: string
+  loss_reason: string; loss_reason_detail: string | null
+  stage_before: string | null; days_in_pipeline: number | null
+  channel: string | null; reactivated_at: string | null; reactivated_by: string | null
+}
+
+export type LossAnalyticsData = {
+  total_lost: number
+  reasons: { reason: string; label: string; count: number; percentage: number }[]
+  top_reason: { reason: string; label: string; count: number; percentage: number } | null
+  by_channel: Record<string, Record<string, number>>
+  avg_days_in_pipeline: number
+  recommendations: string[]
+  weekly_trend: { week: string; count: number }[]
+  reactivation_due: {
+    id: string; name: string; loss_reason: string; lost_at: string
+    revisit_at: string; times_lost: number; days_since_lost: number
+    loss_reason_label: string; platform: string | null
+  }[]
 }
 
 // ── Styles ──

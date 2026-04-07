@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { S, PIPELINE_STAGES, TERMINAL_STAGES, ALL_STAGES, type Prospect, type Community } from '../shared'
+import { S, PIPELINE_STAGES, TERMINAL_STAGES, ALL_STAGES, LOSS_REASONS, LOSS_CATEGORY_COLORS, getLossReasonLabel, type Prospect, type Community, type LossHistoryEntry } from '../shared'
 
 const SOURCES = ['manual', 'referral', 'community', 'inbound', 'event', 'facebook', 'whatsapp', 'linkedin', 'onlinejobs']
 const PRIORITIES = ['low', 'normal', 'high', 'urgent']
@@ -25,6 +25,130 @@ type Props = {
   onUpdate: (p: Prospect[]) => void
 }
 
+// ── Loss Reason Modal ──
+function LossReasonModal({ targetStage, onConfirm, onCancel }: {
+  targetStage: 'lost' | 'declined'
+  onConfirm: (reason: string, detail: string, changedBy: string) => void
+  onCancel: () => void
+}) {
+  const [reason, setReason] = useState('')
+  const [detail, setDetail] = useState('')
+  const [changedBy, setChangedBy] = useState('')
+
+  const selectedReason = LOSS_REASONS.find(r => r.id === reason)
+  const revisitDays = selectedReason?.revisitDays ?? 0
+  const canSubmit = reason && (reason !== 'other' || detail.trim()) && changedBy
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'rgba(0,0,0,0.5)',
+    }} onClick={onCancel}>
+      <div style={{
+        background: '#fff', borderRadius: 14, padding: 28, width: 480, maxHeight: '85vh', overflowY: 'auto',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+      }} onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: S.text, margin: '0 0 4px' }}>
+          Why did this prospect not convert?
+        </h3>
+        <p style={{ fontSize: 12, color: S.textSecondary, marginBottom: 20 }}>
+          Select a reason for marking as <strong style={{ color: S.red }}>{targetStage}</strong>
+        </p>
+
+        {/* Reason radio buttons */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+          {LOSS_REASONS.map(r => (
+            <label key={r.id} style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+              borderRadius: S.radiusSm, cursor: 'pointer',
+              border: `1px solid ${reason === r.id ? LOSS_CATEGORY_COLORS[r.category] || S.accent : S.borderLight}`,
+              background: reason === r.id ? `${LOSS_CATEGORY_COLORS[r.category] || S.accent}08` : S.bg,
+              transition: 'all 0.1s',
+            }}>
+              <input type="radio" name="loss_reason" value={r.id}
+                checked={reason === r.id} onChange={() => setReason(r.id)}
+                style={{ accentColor: LOSS_CATEGORY_COLORS[r.category] || S.accent }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: reason === r.id ? 600 : 400, color: S.text }}>{r.label}</div>
+              </div>
+              <span style={{
+                fontSize: 9, fontWeight: 600, textTransform: 'uppercase', padding: '2px 6px',
+                borderRadius: 4, color: LOSS_CATEGORY_COLORS[r.category], background: `${LOSS_CATEGORY_COLORS[r.category]}15`,
+              }}>{r.category}</span>
+            </label>
+          ))}
+        </div>
+
+        {/* Detail text */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 12, fontWeight: 500, color: S.textSecondary, display: 'block', marginBottom: 4 }}>
+            Details {reason === 'other' ? '(required)' : '(optional)'}
+          </label>
+          <textarea value={detail} onChange={e => setDetail(e.target.value)} rows={2}
+            placeholder="Extra context..."
+            style={{
+              width: '100%', border: `1px solid ${reason === 'other' && !detail.trim() ? S.red : S.border}`,
+              borderRadius: S.radiusSm, padding: '8px 12px', fontSize: 13, resize: 'vertical',
+              fontFamily: S.font, boxSizing: 'border-box',
+            }} />
+        </div>
+
+        {/* Changed by */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 12, fontWeight: 500, color: S.textSecondary, display: 'block', marginBottom: 4 }}>
+            Marked by (required)
+          </label>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {SENDERS.map(s => (
+              <button key={s} onClick={() => setChangedBy(s)}
+                style={{
+                  padding: '6px 16px', fontSize: 12, fontWeight: changedBy === s ? 600 : 400,
+                  borderRadius: S.radiusSm, cursor: 'pointer', textTransform: 'capitalize',
+                  border: `1px solid ${changedBy === s ? S.accent : S.border}`,
+                  background: changedBy === s ? S.accentLight : S.bg,
+                  color: changedBy === s ? S.accent : S.textSecondary,
+                }}>{s}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Revisit info */}
+        {reason && (
+          <div style={{
+            background: revisitDays > 0 ? S.greenLight : S.surface,
+            borderRadius: S.radiusSm, padding: '8px 12px', marginBottom: 20,
+            fontSize: 12, color: revisitDays > 0 ? S.green : S.textMuted,
+          }}>
+            {revisitDays > 0
+              ? `This prospect will be revisited in ${revisitDays} days.`
+              : 'This prospect will not be automatically revisited (wrong prospect type).'}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button onClick={onCancel}
+            style={{ padding: '8px 20px', fontSize: 13, borderRadius: S.radiusSm, border: `1px solid ${S.border}`, background: S.bg, color: S.textSecondary, cursor: 'pointer' }}>
+            Cancel
+          </button>
+          <button onClick={() => canSubmit && onConfirm(reason, detail, changedBy)}
+            disabled={!canSubmit}
+            style={{
+              padding: '8px 20px', fontSize: 13, fontWeight: 600, borderRadius: S.radiusSm,
+              border: 'none', cursor: canSubmit ? 'pointer' : 'not-allowed',
+              background: canSubmit ? S.red : S.border, color: canSubmit ? '#fff' : S.textMuted,
+              opacity: canSubmit ? 1 : 0.6,
+            }}>
+            Mark as {targetStage === 'lost' ? 'Lost' : 'Declined'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Main Component ──
 export default function ProspectsTab({ prospects, communities, onUpdate }: Props) {
   const [view, setView] = useState<'pipeline' | 'list'>('pipeline')
   const [search, setSearch] = useState('')
@@ -32,6 +156,7 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
   const [showAdd, setShowAdd] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [activities, setActivities] = useState<ProspectActivity[]>([])
+  const [lossHistory, setLossHistory] = useState<LossHistoryEntry[]>([])
   const [actLoading, setActLoading] = useState(false)
 
   const [draggingId, setDraggingId] = useState<string | null>(null)
@@ -39,6 +164,9 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
 
   const [form, setForm] = useState({ name: '', email: '', phone: '', platform: '', handle: '', source: 'manual', community_id: '', priority: 'normal', notes: '' })
   const [actForm, setActForm] = useState({ activity_type: 'call', description: '', direction: '' as '' | 'inbound' | 'outbound', channel_used: '', sender: '' })
+
+  // Loss reason modal state
+  const [lossModal, setLossModal] = useState<{ prospect: Prospect; targetStage: 'lost' | 'declined' } | null>(null)
 
   const filtered = prospects.filter(p => {
     if (filterStage !== 'all' && p.stage !== filterStage) return false
@@ -63,14 +191,41 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
     }
   }
 
-  async function updateStage(prospect: Prospect, newStage: string) {
+  // Stage change — intercept lost/declined with modal
+  function requestStageChange(prospect: Prospect, newStage: string) {
+    if (newStage === prospect.stage) return
+    if (newStage === 'lost' || newStage === 'declined') {
+      setLossModal({ prospect, targetStage: newStage as 'lost' | 'declined' })
+    } else {
+      executeStageChange(prospect, newStage)
+    }
+  }
+
+  async function executeStageChange(prospect: Prospect, newStage: string, lossReason?: string, lossDetail?: string, changedBy?: string) {
+    const body: Record<string, string | undefined> = { stage: newStage, old_stage: prospect.stage }
+    if (lossReason) body.loss_reason = lossReason
+    if (lossDetail) body.loss_reason_detail = lossDetail
+    if (changedBy) body.changed_by = changedBy
     const res = await fetch(`/api/admin/genx/prospects/${prospect.id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stage: newStage, old_stage: prospect.stage }),
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     })
     if (res.ok) {
-      onUpdate(prospects.map(p => p.id === prospect.id ? { ...p, stage: newStage, updated_at: new Date().toISOString() } : p))
+      onUpdate(prospects.map(p => p.id === prospect.id ? {
+        ...p, stage: newStage, updated_at: new Date().toISOString(),
+        ...(lossReason ? { loss_reason: lossReason, loss_reason_detail: lossDetail || null, lost_at: new Date().toISOString(), lost_by: changedBy || null } : {}),
+        ...((prospect.stage === 'lost' || prospect.stage === 'declined') && newStage !== 'lost' && newStage !== 'declined' ? { loss_reason: null, loss_reason_detail: null, revisit_at: null } : {}),
+      } : p))
     }
+  }
+
+  async function handleLossConfirm(reason: string, detail: string, changedBy: string) {
+    if (!lossModal) return
+    await executeStageChange(lossModal.prospect, lossModal.targetStage, reason, detail, changedBy)
+    setLossModal(null)
+  }
+
+  async function reactivateProspect(prospect: Prospect) {
+    await executeStageChange(prospect, 'identified', undefined, undefined, undefined)
   }
 
   async function updatePriority(prospect: Prospect, priority: string) {
@@ -97,20 +252,18 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
     if (expandedId === prospectId) { setExpandedId(null); return }
     setExpandedId(prospectId)
     setActLoading(true)
-    const res = await fetch(`/api/admin/genx/prospects/${prospectId}/activity`)
+    const res = await fetch(`/api/admin/genx/prospects/${prospectId}`)
     if (res.ok) {
-      const { activities: acts } = await res.json()
-      setActivities(acts)
+      const data = await res.json()
+      setActivities(data.activities || [])
+      setLossHistory(data.loss_history || [])
     }
     setActLoading(false)
   }
 
   async function logActivity(prospectId: string) {
     if (!actForm.description.trim() && !actForm.activity_type) return
-    const payload: Record<string, string> = {
-      activity_type: actForm.activity_type,
-      description: actForm.description,
-    }
+    const payload: Record<string, string> = { activity_type: actForm.activity_type, description: actForm.description }
     if (actForm.direction) payload.direction = actForm.direction
     if (actForm.channel_used) payload.channel_used = actForm.channel_used
     if (actForm.sender) payload.sender = actForm.sender
@@ -128,6 +281,15 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
 
   return (
     <div>
+      {/* Loss Reason Modal */}
+      {lossModal && (
+        <LossReasonModal
+          targetStage={lossModal.targetStage}
+          onConfirm={handleLossConfirm}
+          onCancel={() => setLossModal(null)}
+        />
+      )}
+
       {/* Header row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -195,7 +357,7 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
         </div>
       )}
 
-      {/* Pipeline View — Drag & Drop Kanban (horizontally scrollable) */}
+      {/* Pipeline View */}
       {view === 'pipeline' && (
         <div style={{ overflowX: 'auto', paddingBottom: 12 }}>
           <div style={{ display: 'flex', gap: 10, minWidth: PIPELINE_STAGES.length * 185 }}>
@@ -214,7 +376,7 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
                     e.preventDefault(); setDragOverStage(null)
                     const pid = e.dataTransfer.getData('text/plain')
                     const prospect = prospects.find(p => p.id === pid)
-                    if (prospect && prospect.stage !== stage.key) updateStage(prospect, stage.key)
+                    if (prospect && prospect.stage !== stage.key) requestStageChange(prospect, stage.key)
                     setDraggingId(null)
                   }}
                   style={{
@@ -268,11 +430,10 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
           </div>
 
           {/* Terminal stages row */}
-          {filtered.some(p => TERMINAL_STAGES.some(t => t.key === p.stage)) && (
+          {(filtered.some(p => TERMINAL_STAGES.some(t => t.key === p.stage)) || draggingId) && (
             <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
               {TERMINAL_STAGES.map(ts => {
                 const items = filtered.filter(p => p.stage === ts.key)
-                if (items.length === 0) return null
                 return (
                   <div key={ts.key}
                     onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
@@ -282,12 +443,13 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
                       e.preventDefault(); setDragOverStage(null)
                       const pid = e.dataTransfer.getData('text/plain')
                       const prospect = prospects.find(p => p.id === pid)
-                      if (prospect && prospect.stage !== ts.key) updateStage(prospect, ts.key)
+                      if (prospect && prospect.stage !== ts.key) requestStageChange(prospect, ts.key)
                       setDraggingId(null)
                     }}
                     style={{
                       flex: 1, background: `${ts.color}08`, borderRadius: S.radius, padding: 14,
                       border: dragOverStage === ts.key ? `2px solid ${ts.color}` : `1px solid ${ts.color}30`,
+                      minHeight: draggingId ? 60 : undefined,
                     }}>
                     <h4 style={{ fontSize: 12, fontWeight: 600, color: ts.color, marginBottom: 8 }}>{ts.label} ({items.length})</h4>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -295,11 +457,22 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
                         <div key={p.id} draggable
                           onDragStart={e => { setDraggingId(p.id); e.dataTransfer.setData('text/plain', p.id); e.dataTransfer.effectAllowed = 'move' }}
                           onDragEnd={() => { setDraggingId(null); setDragOverStage(null) }}
+                          onClick={() => loadActivities(p.id)}
                           style={{ background: S.bg, borderRadius: S.radiusSm, padding: '6px 10px', fontSize: 11, border: `1px solid ${ts.color}20`, cursor: 'grab' }}>
                           <span style={{ fontWeight: 600 }}>{p.name}</span>
-                          {p.lost_reason && <span style={{ color: S.textMuted, marginLeft: 4 }}>— {p.lost_reason}</span>}
+                          {p.loss_reason && <span style={{ color: S.textMuted, marginLeft: 4 }}>— {getLossReasonLabel(p.loss_reason)}</span>}
                         </div>
                       ))}
+                      {items.length === 0 && draggingId && (
+                        <div style={{
+                          textAlign: 'center', width: '100%', padding: 12, fontSize: 11,
+                          color: dragOverStage === ts.key ? ts.color : S.textMuted,
+                          border: dragOverStage === ts.key ? `2px dashed ${ts.color}40` : '2px dashed transparent',
+                          borderRadius: S.radiusSm,
+                        }}>
+                          Drop → {ts.label}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
@@ -364,9 +537,48 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
                           {p.platform && <span>Platform: {p.platform}</span>}
                         </div>
                         {p.notes && <div style={{ fontSize: 12, color: S.textSecondary, marginBottom: 8 }}>Notes: {p.notes}</div>}
+
+                        {/* Inline loss info */}
+                        {(p.stage === 'lost' || p.stage === 'declined') && p.loss_reason && (
+                          <div style={{ background: S.redLight, borderRadius: S.radiusSm, padding: 12, marginBottom: 10, border: '1px solid #FECACA' }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: S.red, marginBottom: 4 }}>
+                              {p.stage.toUpperCase()} — {getLossReasonLabel(p.loss_reason)}
+                            </div>
+                            {p.loss_reason_detail && <div style={{ fontSize: 12, color: '#991B1B', marginBottom: 4 }}>"{p.loss_reason_detail}"</div>}
+                            <div style={{ fontSize: 11, color: S.textMuted }}>
+                              {p.lost_by && <span>By {p.lost_by}</span>}
+                              {p.lost_at && <span> · {new Date(p.lost_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+                              {p.times_lost > 1 && <span> · Lost {p.times_lost}x</span>}
+                            </div>
+                            {p.revisit_at && (
+                              <div style={{ fontSize: 11, color: S.green, marginTop: 4 }}>
+                                Revisit: {new Date(p.revisit_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </div>
+                            )}
+                            {/* Loss history */}
+                            {lossHistory.length > 0 && (
+                              <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #FECACA' }}>
+                                <div style={{ fontSize: 10, fontWeight: 600, color: S.textMuted, marginBottom: 4 }}>LOSS HISTORY</div>
+                                {lossHistory.map(h => (
+                                  <div key={h.id} style={{ fontSize: 11, color: S.textSecondary, padding: '2px 0' }}>
+                                    {new Date(h.lost_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} — {getLossReasonLabel(h.loss_reason)}
+                                    {h.days_in_pipeline != null && <span> · {h.days_in_pipeline}d in pipeline</span>}
+                                    {h.channel && <span> · {h.channel}</span>}
+                                    {h.reactivated_at && <span style={{ color: S.green }}> · reactivated</span>}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <button onClick={() => reactivateProspect(p)}
+                              style={{ marginTop: 8, background: S.green, color: '#fff', border: 'none', borderRadius: S.radiusSm, padding: '6px 14px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                              Reactivate
+                            </button>
+                          </div>
+                        )}
+
                         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                           {[...PIPELINE_STAGES, ...TERMINAL_STAGES].filter(s => s.key !== p.stage).map(s => (
-                            <button key={s.key} onClick={() => updateStage(p, s.key)}
+                            <button key={s.key} onClick={() => requestStageChange(p, s.key)}
                               style={{ fontSize: 10, padding: '3px 8px', borderRadius: 4, cursor: 'pointer', border: `1px solid ${s.color}30`, background: `${s.color}10`, color: s.color, fontWeight: 500 }}>
                               → {s.label}
                             </button>
@@ -393,7 +605,7 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
                           </div>
                         )}
 
-                        {/* Activity form with direction */}
+                        {/* Activity form */}
                         <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
                           <div style={{ display: 'flex', gap: 2 }}>
                             {([['', 'Any'], ['inbound', '← In'], ['outbound', '→ Out']] as const).map(([val, label]) => (
@@ -404,9 +616,7 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
                                   borderRadius: S.radiusSm,
                                   background: actForm.direction === val ? (val === 'inbound' ? S.orangeLight : val === 'outbound' ? S.accentLight : S.surface) : S.bg,
                                   color: actForm.direction === val ? (val === 'inbound' ? S.orange : val === 'outbound' ? S.accent : S.text) : S.textSecondary,
-                                }}>
-                                {label}
-                              </button>
+                                }}>{label}</button>
                             ))}
                           </div>
                           <select value={actForm.activity_type} onChange={e => setActForm({ ...actForm, activity_type: e.target.value })}
@@ -432,7 +642,7 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
                             style={{ background: S.accent, color: '#fff', border: 'none', borderRadius: S.radiusSm, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Log</button>
                         </div>
 
-                        {/* Activity timeline with speed indicators */}
+                        {/* Activity timeline */}
                         <div style={{ maxHeight: 200, overflowY: 'auto' }}>
                           {actLoading ? <div style={{ fontSize: 12, color: S.textMuted }}>Loading...</div> :
                             activities.length === 0 ? <div style={{ fontSize: 12, color: S.textMuted }}>No activities yet</div> :
@@ -440,7 +650,7 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
                               <div key={a.id} style={{ display: 'flex', gap: 8, padding: '6px 0', borderBottom: `1px solid ${S.borderLight}` }}>
                                 <div style={{
                                   width: 6, height: 6, borderRadius: '50%', marginTop: 5, flexShrink: 0,
-                                  background: a.direction === 'inbound' ? S.orange : a.direction === 'outbound' ? S.accent : S.textMuted,
+                                  background: a.direction === 'inbound' ? S.orange : a.direction === 'outbound' ? S.accent : a.activity_type === 'reactivation' ? S.green : S.textMuted,
                                 }} />
                                 <div style={{ flex: 1 }}>
                                   <div style={{ fontSize: 12, color: S.text }}>
