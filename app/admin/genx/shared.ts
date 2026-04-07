@@ -50,6 +50,9 @@ export type Prospect = {
   interested_at: string | null; pitch_sent_at: string | null; call_scheduled_at: string | null
   call_done_at: string | null; signed_up_at: string | null; onboarding_at: string | null
   active_lg_at: string | null; declined_at: string | null; revisit_later_at: string | null
+  // Response speed
+  last_replied_at: string | null; our_response_at: string | null
+  has_unreplied: boolean; last_response_time_minutes: number | null
 }
 export type Community = {
   id: string; name: string; platform: string; url: string | null
@@ -75,6 +78,25 @@ export type ProspectActivity = {
   id: string; prospect_id: string; activity_type: string; description: string | null
   old_stage: string | null; new_stage: string | null; created_at: string
   admin_prospects?: { name: string } | null
+  // Response speed fields
+  sender?: string | null; direction?: string | null
+  channel_used?: string | null; response_time_minutes?: number | null
+}
+
+export type ResponseSpeedData = {
+  unreplied: {
+    count: number
+    prospects: { id: string; name: string; channel: string | null; waiting_minutes: number; waiting_display: string }[]
+  }
+  speed_stats: {
+    avg_minutes: number; avg_display: string; total_replies: number
+    within_5min: number; within_5min_pct: number
+    within_1hr: number; within_1hr_pct: number
+    within_24hr: number; within_24hr_pct: number
+    expired_count: number
+  }
+  per_person: Record<string, { avg_minutes: number; count: number }>
+  trend: { week: string; avg_minutes: number; count: number }[]
 }
 
 export type FunnelStep = {

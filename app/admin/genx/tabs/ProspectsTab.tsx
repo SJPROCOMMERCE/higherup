@@ -5,6 +5,8 @@ import { S, PIPELINE_STAGES, TERMINAL_STAGES, ALL_STAGES, type Prospect, type Co
 const SOURCES = ['manual', 'referral', 'community', 'inbound', 'event', 'facebook', 'whatsapp', 'linkedin', 'onlinejobs']
 const PRIORITIES = ['low', 'normal', 'high', 'urgent']
 const ACTIVITY_TYPES = ['call', 'dm', 'email', 'meeting', 'note', 'follow_up']
+const CHANNELS = ['whatsapp', 'facebook', 'instagram', 'linkedin', 'email', 'phone', 'telegram', 'other']
+const SENDERS = ['safouane', 'joep']
 
 const PRIORITY_COLORS: Record<string, string> = {
   low: S.textMuted, normal: S.textSecondary, high: S.orange, urgent: S.red,
@@ -13,6 +15,8 @@ const PRIORITY_COLORS: Record<string, string> = {
 type ProspectActivity = {
   id: string; prospect_id: string; activity_type: string; description: string | null
   old_stage: string | null; new_stage: string | null; created_at: string
+  direction: string | null; sender: string | null; channel_used: string | null
+  response_time_minutes: number | null
 }
 
 type Props = {
@@ -34,7 +38,7 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
   const [dragOverStage, setDragOverStage] = useState<string | null>(null)
 
   const [form, setForm] = useState({ name: '', email: '', phone: '', platform: '', handle: '', source: 'manual', community_id: '', priority: 'normal', notes: '' })
-  const [actForm, setActForm] = useState({ activity_type: 'call', description: '' })
+  const [actForm, setActForm] = useState({ activity_type: 'call', description: '', direction: '' as '' | 'inbound' | 'outbound', channel_used: '', sender: '' })
 
   const filtered = prospects.filter(p => {
     if (filterStage !== 'all' && p.stage !== filterStage) return false
@@ -103,13 +107,20 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
 
   async function logActivity(prospectId: string) {
     if (!actForm.description.trim() && !actForm.activity_type) return
+    const payload: Record<string, string> = {
+      activity_type: actForm.activity_type,
+      description: actForm.description,
+    }
+    if (actForm.direction) payload.direction = actForm.direction
+    if (actForm.channel_used) payload.channel_used = actForm.channel_used
+    if (actForm.sender) payload.sender = actForm.sender
     const res = await fetch(`/api/admin/genx/prospects/${prospectId}/activity`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(actForm),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
     })
     if (res.ok) {
       const { activity } = await res.json()
       setActivities([activity, ...activities])
-      setActForm({ activity_type: 'call', description: '' })
+      setActForm({ activity_type: 'call', description: '', direction: '', channel_used: '', sender: '' })
     }
   }
 
@@ -363,27 +374,94 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
                         </div>
                       </div>
                       <div>
-                        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                        {/* Response speed inline */}
+                        {p.has_unreplied && p.last_replied_at && (
+                          <div style={{
+                            background: S.redLight, border: '1px solid #FECACA', borderRadius: S.radiusSm,
+                            padding: '6px 12px', marginBottom: 10, fontSize: 12, color: S.red, fontWeight: 600,
+                          }}>
+                            ⚠ Waiting for response since {new Date(p.last_replied_at).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        )}
+                        {p.last_response_time_minutes != null && !p.has_unreplied && (
+                          <div style={{ fontSize: 11, color: S.textSecondary, marginBottom: 8 }}>
+                            Last response time: <strong style={{
+                              color: p.last_response_time_minutes <= 5 ? S.green : p.last_response_time_minutes <= 60 ? S.yellow : S.red,
+                            }}>
+                              {p.last_response_time_minutes < 60 ? `${p.last_response_time_minutes}m` : `${(p.last_response_time_minutes / 60).toFixed(1)}h`}
+                            </strong>
+                          </div>
+                        )}
+
+                        {/* Activity form with direction */}
+                        <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                          <div style={{ display: 'flex', gap: 2 }}>
+                            {([['', 'Any'], ['inbound', '← In'], ['outbound', '→ Out']] as const).map(([val, label]) => (
+                              <button key={val} onClick={() => setActForm({ ...actForm, direction: val as '' | 'inbound' | 'outbound' })}
+                                style={{
+                                  padding: '4px 10px', fontSize: 11, fontWeight: 500, cursor: 'pointer',
+                                  border: `1px solid ${actForm.direction === val ? (val === 'inbound' ? S.orange : val === 'outbound' ? S.accent : S.border) : S.border}`,
+                                  borderRadius: S.radiusSm,
+                                  background: actForm.direction === val ? (val === 'inbound' ? S.orangeLight : val === 'outbound' ? S.accentLight : S.surface) : S.bg,
+                                  color: actForm.direction === val ? (val === 'inbound' ? S.orange : val === 'outbound' ? S.accent : S.text) : S.textSecondary,
+                                }}>
+                                {label}
+                              </button>
+                            ))}
+                          </div>
                           <select value={actForm.activity_type} onChange={e => setActForm({ ...actForm, activity_type: e.target.value })}
-                            style={{ border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '6px 10px', fontSize: 12, background: S.bg }}>
+                            style={{ border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '4px 8px', fontSize: 11, background: S.bg }}>
                             {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                           </select>
+                          <select value={actForm.channel_used} onChange={e => setActForm({ ...actForm, channel_used: e.target.value })}
+                            style={{ border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '4px 8px', fontSize: 11, background: S.bg, width: 90 }}>
+                            <option value="">Channel</option>
+                            {CHANNELS.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                          <select value={actForm.sender} onChange={e => setActForm({ ...actForm, sender: e.target.value })}
+                            style={{ border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '4px 8px', fontSize: 11, background: S.bg, width: 80 }}>
+                            <option value="">By</option>
+                            {SENDERS.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                           <input placeholder="Description..." value={actForm.description} onChange={e => setActForm({ ...actForm, description: e.target.value })}
                             onKeyDown={e => e.key === 'Enter' && logActivity(p.id)}
                             style={{ flex: 1, border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '6px 10px', fontSize: 12 }} />
                           <button onClick={() => logActivity(p.id)}
                             style={{ background: S.accent, color: '#fff', border: 'none', borderRadius: S.radiusSm, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Log</button>
                         </div>
+
+                        {/* Activity timeline with speed indicators */}
                         <div style={{ maxHeight: 200, overflowY: 'auto' }}>
                           {actLoading ? <div style={{ fontSize: 12, color: S.textMuted }}>Loading...</div> :
                             activities.length === 0 ? <div style={{ fontSize: 12, color: S.textMuted }}>No activities yet</div> :
                             activities.map(a => (
                               <div key={a.id} style={{ display: 'flex', gap: 8, padding: '6px 0', borderBottom: `1px solid ${S.borderLight}` }}>
-                                <div style={{ width: 6, height: 6, borderRadius: '50%', background: S.accent, marginTop: 5, flexShrink: 0 }} />
-                                <div>
-                                  <div style={{ fontSize: 12, color: S.text }}><strong>{a.activity_type}</strong>{a.description ? ` — ${a.description}` : ''}</div>
+                                <div style={{
+                                  width: 6, height: 6, borderRadius: '50%', marginTop: 5, flexShrink: 0,
+                                  background: a.direction === 'inbound' ? S.orange : a.direction === 'outbound' ? S.accent : S.textMuted,
+                                }} />
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontSize: 12, color: S.text }}>
+                                    {a.direction === 'inbound' && <span style={{ color: S.orange, fontWeight: 600, fontSize: 10, marginRight: 4 }}>← IN</span>}
+                                    {a.direction === 'outbound' && <span style={{ color: S.accent, fontWeight: 600, fontSize: 10, marginRight: 4 }}>→ OUT</span>}
+                                    <strong>{a.activity_type}</strong>
+                                    {a.description ? ` — ${a.description}` : ''}
+                                    {a.response_time_minutes != null && (
+                                      <span style={{
+                                        marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
+                                        background: a.response_time_minutes <= 5 ? S.greenLight : a.response_time_minutes <= 60 ? S.yellowLight : S.redLight,
+                                        color: a.response_time_minutes <= 5 ? S.green : a.response_time_minutes <= 60 ? S.yellow : S.red,
+                                      }}>
+                                        ⏱ {a.response_time_minutes < 60 ? `${a.response_time_minutes}m` : `${(a.response_time_minutes / 60).toFixed(1)}h`}
+                                      </span>
+                                    )}
+                                  </div>
                                   <div style={{ fontSize: 10, color: S.textMuted }}>
                                     {new Date(a.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                    {a.sender && <span style={{ marginLeft: 4 }}>· {a.sender}</span>}
+                                    {a.channel_used && <span style={{ marginLeft: 4 }}>· {a.channel_used}</span>}
                                   </div>
                                 </div>
                               </div>

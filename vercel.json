@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/genx-monthly",
       "schedule": "0 7 1 * *"
+    },
+    {
+      "path": "/api/cron/response-speed-cleanup",
+      "schedule": "0 5 * * *"
     }
   ]
 }
