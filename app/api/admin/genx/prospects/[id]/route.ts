@@ -23,16 +23,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!await checkAdmin()) return Response.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
   const db = genxDb()
-  const [prospectRes, activitiesRes, lossHistoryRes] = await Promise.all([
+  const [prospectRes, activitiesRes, lossHistoryRes, reactivationRes] = await Promise.all([
     db.from('admin_prospects').select('*').eq('id', id).single(),
     db.from('admin_prospect_activities').select('*').eq('prospect_id', id).order('created_at', { ascending: false }),
     db.from('admin_prospect_loss_history').select('*').eq('prospect_id', id).order('lost_at', { ascending: false }),
+    db.from('admin_reactivation_cycles').select('*').eq('prospect_id', id).order('scheduled_at', { ascending: false }),
   ])
   if (!prospectRes.data) return Response.json({ error: 'Not found' }, { status: 404 })
   return Response.json({
     prospect: prospectRes.data,
     activities: activitiesRes.data || [],
     loss_history: lossHistoryRes.data || [],
+    reactivation_cycles: reactivationRes.data || [],
   })
 }
 
@@ -90,7 +92,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       update.times_lost = (current?.times_lost || 0) + 1
 
       // Insert loss history record
-      await db.from('admin_prospect_loss_history').insert({
+      const { data: lossRecord } = await db.from('admin_prospect_loss_history').insert({
         prospect_id: id,
         lost_at: now,
         lost_by: body.changed_by || 'unknown',
@@ -99,7 +101,30 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         stage_before: body.old_stage,
         days_in_pipeline: daysInPipeline,
         channel: current?.platform || null,
-      })
+      }).select('id').single()
+
+      // Auto-schedule reactivation cycles based on templates
+      if (revisitDays > 0) {
+        const { data: templates } = await db
+          .from('admin_reactivation_templates')
+          .select('*')
+          .eq('loss_reason', body.loss_reason)
+          .eq('is_active', true)
+          .order('days_after_loss', { ascending: true })
+
+        for (const template of templates || []) {
+          const scheduledAt = new Date(Date.now() + template.days_after_loss * 86400000)
+          await db.from('admin_reactivation_cycles').insert({
+            prospect_id: id,
+            loss_history_id: lossRecord?.id || null,
+            scheduled_at: scheduledAt.toISOString(),
+            reason_for_revisit: 'scheduled_auto',
+            script_to_use: template.title,
+            custom_message: template.content,
+            status: 'scheduled',
+          })
+        }
+      }
 
       // Log activity with loss reason
       await db.from('admin_prospect_activities').insert({
@@ -142,6 +167,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           reactivated_by: body.changed_by || 'unknown',
         }).eq('id', latestLoss.id)
       }
+
+      // Cancel all scheduled reactivation cycles
+      await db.from('admin_reactivation_cycles').update({
+        status: 'skipped',
+        result_note: 'Cancelled — prospect manually reactivated',
+      }).eq('prospect_id', id).eq('status', 'scheduled')
+
+      // Increment times_reactivated
+      const { data: reactCurrent } = await db.from('admin_prospects').select('times_reactivated').eq('id', id).single()
+      update.times_reactivated = (reactCurrent?.times_reactivated || 0) + 1
+      update.last_reactivated_at = now
+      update.last_reactivated_by = body.changed_by || 'unknown'
 
       await db.from('admin_prospect_activities').insert({
         prospect_id: id,

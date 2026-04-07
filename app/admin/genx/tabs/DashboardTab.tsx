@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { S, PIPELINE_STAGES, TERMINAL_STAGES, LOSS_CATEGORY_COLORS, getLossReasonLabel, type LG, type Payout, type ProspectActivity, type Scorecard, type ResponseSpeedData, type LossAnalyticsData } from '../shared'
+import { S, PIPELINE_STAGES, TERMINAL_STAGES, LOSS_CATEGORY_COLORS, getLossReasonLabel, type LG, type Payout, type ProspectActivity, type Scorecard, type ResponseSpeedData, type LossAnalyticsData, type ReactivationData, type ReactivationCycle } from '../shared'
 
 type FunnelStep = {
   stage: string; count: number; reached: number
@@ -55,6 +55,20 @@ export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRef
   const [funnelLoading, setFunnelLoading] = useState(true)
   const [speed, setSpeed] = useState<ResponseSpeedData | null>(null)
   const [lossData, setLossData] = useState<LossAnalyticsData | null>(null)
+  const [reactData, setReactData] = useState<ReactivationData | null>(null)
+  const [reactLoading, setReactLoading] = useState<string | null>(null)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+  // Reactivate modal
+  const [reactModal, setReactModal] = useState<{ cycle: ReactivationCycle } | null>(null)
+  const [reactStage, setReactStage] = useState('contacted')
+  const [reactNote, setReactNote] = useState('')
+  const [reactBy, setReactBy] = useState('')
+  // Declined again modal
+  const [declineModal, setDeclineModal] = useState<{ cycle: ReactivationCycle } | null>(null)
+  const [declineSameReason, setDeclineSameReason] = useState(true)
+  const [declineReason, setDeclineReason] = useState('')
+  const [declineNote, setDeclineNote] = useState('')
+  const [declineBy, setDeclineBy] = useState('')
 
   const kpis = dashboardData?.kpis || {}
   const pipeline = dashboardData?.pipeline || {}
@@ -68,10 +82,12 @@ export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRef
       fetch('/api/admin/genx/funnel').then(r => r.json()).catch(() => null),
       fetch('/api/admin/genx/analytics/response-speed').then(r => r.json()).catch(() => null),
       fetch('/api/admin/genx/analytics/loss-reasons').then(r => r.json()).catch(() => null),
-    ]).then(([funnelData, speedData, lossAnalytics]) => {
+      fetch('/api/admin/genx/reactivation').then(r => r.json()).catch(() => null),
+    ]).then(([funnelData, speedData, lossAnalytics, reactivation]) => {
       setFunnel(funnelData)
       setSpeed(speedData)
       setLossData(lossAnalytics)
+      setReactData(reactivation)
       setFunnelLoading(false)
       if (speedData?.unreplied?.count != null) {
         onUnrepliedCount?.(speedData.unreplied.count)
@@ -585,6 +601,411 @@ export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRef
           </div>
         </div>
       )}
+
+      {/* ── REACTIVATION PIPELINE ── */}
+      {reactData && (reactData.due_now.count > 0 || reactData.upcoming.count > 0 || reactData.stats.sent_last_30_days > 0) && (() => {
+        function fillPlaceholders(template: string, prospectName: string) {
+          const lgs = reactData!.platform_stats.active_lgs
+          const topEarner = reactData!.platform_stats.top_earner_amount
+          return template
+            .replace(/\[name\]/g, prospectName || '[name]')
+            .replace(/\[X\]/g, String(lgs))
+            .replace(/\[Y\]/g, topEarner)
+            .replace(/\[competitor[^\]]*\]/g, '[their alternative]')
+        }
+
+        async function execCycle(cycleId: string, action: string, extra?: Record<string, string>) {
+          setReactLoading(cycleId)
+          await fetch(`/api/admin/genx/reactivation/${cycleId}/execute`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action, ...extra }),
+          })
+          // Refresh reactivation data
+          const res = await fetch('/api/admin/genx/reactivation')
+          setReactData(await res.json())
+          setReactLoading(null)
+        }
+
+        async function copyMessage(cycleId: string, message: string, prospectName: string) {
+          const filled = fillPlaceholders(message, prospectName)
+          await navigator.clipboard.writeText(filled)
+          setCopiedId(cycleId)
+          setTimeout(() => setCopiedId(null), 2000)
+        }
+
+        const SENDERS = ['safouane', 'joep']
+
+        return (
+          <div style={{ background: S.surface, borderRadius: S.radius, padding: 24, border: `1px solid ${S.border}`, marginBottom: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: S.text, margin: 0 }}>Reactivation Pipeline</h3>
+                <p style={{ fontSize: 12, color: S.textSecondary, margin: '4px 0 0' }}>Follow up with lost prospects at the right time</p>
+              </div>
+              {reactData.due_now.count > 0 && (
+                <span style={{
+                  background: S.orangeLight, color: S.orange, padding: '4px 12px',
+                  borderRadius: 12, fontSize: 13, fontWeight: 700,
+                }}>{reactData.due_now.count} due now</span>
+              )}
+            </div>
+
+            {/* Stats row */}
+            {reactData.stats.sent_last_30_days > 0 && (
+              <div style={{ display: 'flex', gap: 20, marginBottom: 20, padding: '14px 18px', background: S.bg, borderRadius: S.radiusSm, border: `1px solid ${S.borderLight}` }}>
+                <div>
+                  <div style={{ fontSize: 11, color: S.textMuted, marginBottom: 2 }}>Sent (30d)</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: S.accent }}>{reactData.stats.sent_last_30_days}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: S.textMuted, marginBottom: 2 }}>Converted</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: S.green }}>{reactData.stats.converted}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: S.textMuted, marginBottom: 2 }}>Declined Again</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: S.red }}>{reactData.stats.declined_again}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: S.textMuted, marginBottom: 2 }}>Conversion Rate</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: reactData.stats.conversion_rate >= 20 ? S.green : reactData.stats.conversion_rate >= 10 ? S.yellow : S.textSecondary }}>
+                    {reactData.stats.conversion_rate}%
+                  </div>
+                </div>
+                {Object.keys(reactData.stats.converted_by_reason).length > 0 && (
+                  <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+                    <span style={{ fontSize: 11, color: S.textSecondary }}>
+                      Best: <strong style={{ color: S.green }}>
+                        {getLossReasonLabel(Object.entries(reactData.stats.converted_by_reason).sort(([, a], [, b]) => b - a)[0][0])}
+                      </strong>
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Due Now */}
+            {reactData.due_now.count > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: S.orange, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
+                  DUE NOW — {reactData.due_now.count} prospect{reactData.due_now.count !== 1 ? 's' : ''}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {reactData.due_now.cycles.map(c => (
+                    <div key={c.id} style={{
+                      background: S.bg, border: `1px solid ${S.border}`, borderRadius: S.radius, padding: 16,
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: S.text }}>{c.prospect_name || 'Unknown'}</div>
+                          <div style={{ fontSize: 12, color: S.textSecondary, marginTop: 2 }}>
+                            {c.prospect_loss_reason && <span>{getLossReasonLabel(c.prospect_loss_reason)}</span>}
+                            {c.days_overdue != null && <span style={{ marginLeft: 8, color: S.orange }}>{c.days_overdue}d overdue</span>}
+                            {c.prospect_platform && <span style={{ marginLeft: 8, textTransform: 'capitalize' }}>{c.prospect_platform}</span>}
+                            {(c.prospect_times_lost || 0) > 1 && <span style={{ marginLeft: 8, color: S.red }}>lost {c.prospect_times_lost}x</span>}
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 10, color: S.textMuted }}>
+                          {c.reason_for_revisit === 'scheduled_auto' ? 'Auto' : c.reason_for_revisit}
+                        </div>
+                      </div>
+
+                      {/* Message preview */}
+                      {c.custom_message && (
+                        <div style={{
+                          background: S.surface, borderRadius: S.radiusSm, padding: '10px 14px',
+                          fontSize: 12, color: S.text, lineHeight: 1.6, marginBottom: 12,
+                          border: `1px solid ${S.borderLight}`, whiteSpace: 'pre-wrap',
+                        }}>
+                          {fillPlaceholders(c.custom_message, c.prospect_name || '')}
+                        </div>
+                      )}
+
+                      {/* Action buttons */}
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {c.custom_message && (
+                          <button onClick={() => copyMessage(c.id, c.custom_message!, c.prospect_name || '')}
+                            disabled={reactLoading === c.id}
+                            style={{
+                              padding: '6px 14px', fontSize: 12, fontWeight: 500, borderRadius: S.radiusSm,
+                              border: `1px solid ${S.border}`, cursor: 'pointer',
+                              background: copiedId === c.id ? S.greenLight : '#F3F4F6',
+                              color: copiedId === c.id ? S.green : '#374151',
+                            }}>
+                            {copiedId === c.id ? 'Copied!' : 'Copy Message'}
+                          </button>
+                        )}
+                        <button onClick={() => execCycle(c.id, 'send', { by: 'admin', note: '' })}
+                          disabled={reactLoading === c.id}
+                          style={{
+                            padding: '6px 14px', fontSize: 12, fontWeight: 600, borderRadius: S.radiusSm,
+                            border: 'none', cursor: 'pointer', background: S.accent, color: '#fff',
+                          }}>
+                          {reactLoading === c.id ? '...' : 'Mark as Sent'}
+                        </button>
+                        <button onClick={() => execCycle(c.id, 'skip', { by: 'admin' })}
+                          disabled={reactLoading === c.id}
+                          style={{
+                            padding: '6px 14px', fontSize: 12, fontWeight: 500, borderRadius: S.radiusSm,
+                            border: `1px solid ${S.border}`, cursor: 'pointer', background: '#F3F4F6', color: '#6B7280',
+                          }}>
+                          Skip
+                        </button>
+                        <button onClick={() => { setReactModal({ cycle: c }); setReactStage('contacted'); setReactNote(''); setReactBy('') }}
+                          disabled={reactLoading === c.id}
+                          style={{
+                            padding: '6px 14px', fontSize: 12, fontWeight: 600, borderRadius: S.radiusSm,
+                            border: 'none', cursor: 'pointer', background: S.green, color: '#fff',
+                          }}>
+                          Reactivate
+                        </button>
+                        <button onClick={() => { setDeclineModal({ cycle: c }); setDeclineSameReason(true); setDeclineReason(c.prospect_loss_reason || ''); setDeclineNote(''); setDeclineBy('') }}
+                          disabled={reactLoading === c.id}
+                          style={{
+                            padding: '6px 14px', fontSize: 12, fontWeight: 500, borderRadius: S.radiusSm,
+                            border: `1px solid ${S.border}`, cursor: 'pointer', background: S.redLight, color: S.red,
+                          }}>
+                          Declined Again
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Upcoming */}
+            {reactData.upcoming.count > 0 && (
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: S.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
+                  UPCOMING (next 14 days) — {reactData.upcoming.count} prospect{reactData.upcoming.count !== 1 ? 's' : ''}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {reactData.upcoming.cycles.map(c => (
+                    <div key={c.id} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '8px 14px', background: S.bg, borderRadius: S.radiusSm, border: `1px solid ${S.borderLight}`,
+                    }}>
+                      <div>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: S.text }}>{c.prospect_name || 'Unknown'}</span>
+                        {c.prospect_loss_reason && (
+                          <span style={{ fontSize: 12, color: S.textSecondary, marginLeft: 10 }}>{getLossReasonLabel(c.prospect_loss_reason)}</span>
+                        )}
+                      </div>
+                      <span style={{ fontSize: 12, color: S.accent, fontWeight: 600 }}>
+                        in {c.days_until || 0}d
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {reactData.due_now.count === 0 && reactData.upcoming.count === 0 && (
+              <div style={{ textAlign: 'center', padding: 30, color: S.textMuted, fontSize: 13 }}>
+                No reactivations due. Cycles are auto-scheduled when prospects are marked as lost.
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
+      {/* ── Reactivate Modal ── */}
+      {reactModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.5)',
+        }} onClick={() => setReactModal(null)}>
+          <div style={{
+            background: '#fff', borderRadius: 14, padding: 28, width: 440,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: S.text, margin: '0 0 4px' }}>
+              Reactivate {reactModal.cycle.prospect_name}
+            </h3>
+            <p style={{ fontSize: 12, color: S.textSecondary, marginBottom: 16 }}>
+              Lost {reactModal.cycle.days_overdue || 0} days ago
+              {reactModal.cycle.prospect_loss_reason && <> — {getLossReasonLabel(reactModal.cycle.prospect_loss_reason)}</>}
+              {(reactModal.cycle.prospect_times_lost || 0) > 1 && <span style={{ color: S.orange }}> · lost {reactModal.cycle.prospect_times_lost}x</span>}
+            </p>
+
+            <label style={{ fontSize: 12, fontWeight: 500, color: S.textSecondary, display: 'block', marginBottom: 4 }}>Put back in pipeline as</label>
+            <select value={reactStage} onChange={e => setReactStage(e.target.value)}
+              style={{ width: '100%', border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '8px 12px', fontSize: 13, marginBottom: 14, background: S.bg }}>
+              {PIPELINE_STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </select>
+
+            <label style={{ fontSize: 12, fontWeight: 500, color: S.textSecondary, display: 'block', marginBottom: 4 }}>What changed? (optional)</label>
+            <textarea value={reactNote} onChange={e => setReactNote(e.target.value)} rows={2}
+              placeholder="e.g. We now have 50 LGs and proven earnings"
+              style={{ width: '100%', border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '8px 12px', fontSize: 13, marginBottom: 14, fontFamily: S.font, boxSizing: 'border-box', resize: 'vertical' }} />
+
+            <label style={{ fontSize: 12, fontWeight: 500, color: S.textSecondary, display: 'block', marginBottom: 4 }}>Reactivated by</label>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
+              {['safouane', 'joep'].map(s => (
+                <button key={s} onClick={() => setReactBy(s)}
+                  style={{
+                    padding: '6px 16px', fontSize: 12, fontWeight: reactBy === s ? 600 : 400,
+                    borderRadius: S.radiusSm, cursor: 'pointer', textTransform: 'capitalize',
+                    border: `1px solid ${reactBy === s ? S.accent : S.border}`,
+                    background: reactBy === s ? S.accentLight : S.bg,
+                    color: reactBy === s ? S.accent : S.textSecondary,
+                  }}>{s}</button>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button onClick={() => setReactModal(null)}
+                style={{ padding: '8px 20px', fontSize: 13, borderRadius: S.radiusSm, border: `1px solid ${S.border}`, background: S.bg, color: S.textSecondary, cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button
+                disabled={!reactBy}
+                onClick={async () => {
+                  setReactLoading(reactModal.cycle.id)
+                  await fetch(`/api/admin/genx/reactivation/${reactModal.cycle.id}/execute`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'reactivate', by: reactBy, new_stage: reactStage, reactivation_note: reactNote }),
+                  })
+                  setReactModal(null)
+                  const res = await fetch('/api/admin/genx/reactivation')
+                  setReactData(await res.json())
+                  setReactLoading(null)
+                  onRefresh()
+                }}
+                style={{
+                  padding: '8px 20px', fontSize: 13, fontWeight: 600, borderRadius: S.radiusSm,
+                  border: 'none', cursor: reactBy ? 'pointer' : 'not-allowed',
+                  background: reactBy ? S.green : S.border, color: reactBy ? '#fff' : S.textMuted,
+                  opacity: reactBy ? 1 : 0.6,
+                }}>
+                Reactivate Prospect
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Declined Again Modal ── */}
+      {declineModal && (() => {
+        const cycle = declineModal.cycle
+        const timesLost = cycle.prospect_times_lost || 0
+        const currentReason = cycle.prospect_loss_reason || ''
+        const effectiveReason = declineSameReason ? currentReason : declineReason
+        const canSubmit = effectiveReason && declineBy
+
+        return (
+          <div style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,0.5)',
+          }} onClick={() => setDeclineModal(null)}>
+            <div style={{
+              background: '#fff', borderRadius: 14, padding: 28, width: 440,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+            }} onClick={e => e.stopPropagation()}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: S.text, margin: '0 0 4px' }}>
+                {cycle.prospect_name} declined again
+              </h3>
+              <p style={{ fontSize: 12, color: S.textSecondary, marginBottom: 16 }}>
+                This is attempt #{timesLost + 1}.
+              </p>
+
+              <label style={{ fontSize: 12, fontWeight: 500, color: S.textSecondary, display: 'block', marginBottom: 8 }}>New reason</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                  borderRadius: S.radiusSm, cursor: 'pointer',
+                  border: `1px solid ${declineSameReason ? S.accent : S.borderLight}`,
+                  background: declineSameReason ? S.accentLight : S.bg,
+                }}>
+                  <input type="radio" checked={declineSameReason} onChange={() => setDeclineSameReason(true)}
+                    style={{ accentColor: S.accent }} />
+                  <span style={{ fontSize: 13, color: S.text }}>Same reason ({getLossReasonLabel(currentReason)})</span>
+                </label>
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                  borderRadius: S.radiusSm, cursor: 'pointer',
+                  border: `1px solid ${!declineSameReason ? S.accent : S.borderLight}`,
+                  background: !declineSameReason ? S.accentLight : S.bg,
+                }}>
+                  <input type="radio" checked={!declineSameReason} onChange={() => setDeclineSameReason(false)}
+                    style={{ accentColor: S.accent }} />
+                  <span style={{ fontSize: 13, color: S.text }}>Different reason:</span>
+                  {!declineSameReason && (
+                    <select value={declineReason} onChange={e => setDeclineReason(e.target.value)}
+                      onClick={e => e.stopPropagation()}
+                      style={{ border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '4px 8px', fontSize: 12, background: S.bg }}>
+                      <option value="">Select...</option>
+                      {['wants_fixed_fee', 'thinks_scam', 'thinks_mlm', 'no_time', 'no_reply_5plus', 'uses_competitor', 'too_complicated', 'bad_timing', 'other'].map(r => (
+                        <option key={r} value={r}>{getLossReasonLabel(r)}</option>
+                      ))}
+                    </select>
+                  )}
+                </label>
+              </div>
+
+              <label style={{ fontSize: 12, fontWeight: 500, color: S.textSecondary, display: 'block', marginBottom: 4 }}>Note (optional)</label>
+              <textarea value={declineNote} onChange={e => setDeclineNote(e.target.value)} rows={2}
+                placeholder="Extra context..."
+                style={{ width: '100%', border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '8px 12px', fontSize: 13, marginBottom: 10, fontFamily: S.font, boxSizing: 'border-box', resize: 'vertical' }} />
+
+              {/* Escalation info */}
+              <div style={{
+                background: timesLost + 1 >= 3 ? S.redLight : S.yellowLight,
+                borderRadius: S.radiusSm, padding: '8px 12px', marginBottom: 14,
+                fontSize: 12, color: timesLost + 1 >= 3 ? S.red : S.yellow, fontWeight: 500,
+              }}>
+                {timesLost + 1 >= 3
+                  ? 'After 3 declines, no more reactivation will be scheduled. This prospect is permanently lost.'
+                  : `Next reactivation will be scheduled with ${Math.min(timesLost + 1, 3)}x the standard wait time.`}
+              </div>
+
+              <label style={{ fontSize: 12, fontWeight: 500, color: S.textSecondary, display: 'block', marginBottom: 4 }}>Marked by</label>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
+                {['safouane', 'joep'].map(s => (
+                  <button key={s} onClick={() => setDeclineBy(s)}
+                    style={{
+                      padding: '6px 16px', fontSize: 12, fontWeight: declineBy === s ? 600 : 400,
+                      borderRadius: S.radiusSm, cursor: 'pointer', textTransform: 'capitalize',
+                      border: `1px solid ${declineBy === s ? S.accent : S.border}`,
+                      background: declineBy === s ? S.accentLight : S.bg,
+                      color: declineBy === s ? S.accent : S.textSecondary,
+                    }}>{s}</button>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button onClick={() => setDeclineModal(null)}
+                  style={{ padding: '8px 20px', fontSize: 13, borderRadius: S.radiusSm, border: `1px solid ${S.border}`, background: S.bg, color: S.textSecondary, cursor: 'pointer' }}>
+                  Cancel
+                </button>
+                <button
+                  disabled={!canSubmit}
+                  onClick={async () => {
+                    setReactLoading(cycle.id)
+                    await fetch(`/api/admin/genx/reactivation/${cycle.id}/execute`, {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ action: 'declined_again', by: declineBy, new_loss_reason: effectiveReason, note: declineNote }),
+                    })
+                    setDeclineModal(null)
+                    const res = await fetch('/api/admin/genx/reactivation')
+                    setReactData(await res.json())
+                    setReactLoading(null)
+                  }}
+                  style={{
+                    padding: '8px 20px', fontSize: 13, fontWeight: 600, borderRadius: S.radiusSm,
+                    border: 'none', cursor: canSubmit ? 'pointer' : 'not-allowed',
+                    background: canSubmit ? S.red : S.border, color: canSubmit ? '#fff' : S.textMuted,
+                    opacity: canSubmit ? 1 : 0.6,
+                  }}>
+                  Mark as Declined
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Today's Activity + Pending Actions ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>

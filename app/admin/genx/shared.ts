@@ -162,6 +162,50 @@ export type LossAnalyticsData = {
   }[]
 }
 
+// ── Reactivation Pipeline ──
+export type ReactivationCycle = {
+  id: string; prospect_id: string
+  loss_history_id: string | null
+  scheduled_at: string; reason_for_revisit: string
+  script_to_use: string | null; custom_message: string | null
+  status: string; executed_at: string | null; executed_by: string | null
+  result_note: string | null; new_pipeline_status: string | null
+  created_at: string
+  // Joined prospect fields
+  prospect_name?: string; prospect_platform?: string | null
+  prospect_handle?: string | null; prospect_loss_reason?: string | null
+  prospect_times_lost?: number; prospect_times_reactivated?: number
+  days_overdue?: number; days_until?: number
+}
+
+export type ReactivationTemplate = {
+  id: string; loss_reason: string; title: string; content: string
+  description: string | null; best_channel: string | null
+  expected_reply_rate: string | null; days_after_loss: number
+  sort_order: number; is_active: boolean
+}
+
+export type ReactivationData = {
+  due_now: { count: number; cycles: ReactivationCycle[] }
+  upcoming: { count: number; cycles: ReactivationCycle[] }
+  stats: {
+    sent_last_30_days: number; converted: number
+    declined_again: number; conversion_rate: number
+    converted_by_reason: Record<string, number>
+  }
+  recent_results: ReactivationCycle[]
+  platform_stats: { active_lgs: number; top_earner_amount: string }
+}
+
+export const REACTIVATION_REASONS = [
+  { id: 'scheduled_auto', label: 'Auto-scheduled (loss reason)' },
+  { id: 'scheduled_manual', label: 'Manually scheduled' },
+  { id: 'milestone_reached', label: 'HigherUp milestone reached' },
+  { id: 'new_feature', label: 'New feature launched' },
+  { id: 'seasonal', label: 'Seasonal (new year, Q1, etc.)' },
+  { id: 'competitor_change', label: 'Competitor changed or stopped' },
+] as const
+
 // ── Styles ──
 export const S = {
   bg: '#FFFFFF',

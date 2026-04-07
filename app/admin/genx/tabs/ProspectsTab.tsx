@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { S, PIPELINE_STAGES, TERMINAL_STAGES, ALL_STAGES, LOSS_REASONS, LOSS_CATEGORY_COLORS, getLossReasonLabel, type Prospect, type Community, type LossHistoryEntry } from '../shared'
+import { S, PIPELINE_STAGES, TERMINAL_STAGES, ALL_STAGES, LOSS_REASONS, LOSS_CATEGORY_COLORS, REACTIVATION_REASONS, getLossReasonLabel, type Prospect, type Community, type LossHistoryEntry, type ReactivationCycle } from '../shared'
 
 const SOURCES = ['manual', 'referral', 'community', 'inbound', 'event', 'facebook', 'whatsapp', 'linkedin', 'onlinejobs']
 const PRIORITIES = ['low', 'normal', 'high', 'urgent']
@@ -157,7 +157,13 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [activities, setActivities] = useState<ProspectActivity[]>([])
   const [lossHistory, setLossHistory] = useState<LossHistoryEntry[]>([])
+  const [reactivationCycles, setReactivationCycles] = useState<ReactivationCycle[]>([])
   const [actLoading, setActLoading] = useState(false)
+  // Schedule reactivation modal
+  const [scheduleModal, setScheduleModal] = useState<{ prospect: Prospect } | null>(null)
+  const [schedDate, setSchedDate] = useState('')
+  const [schedReason, setSchedReason] = useState('scheduled_manual')
+  const [schedMessage, setSchedMessage] = useState('')
 
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragOverStage, setDragOverStage] = useState<string | null>(null)
@@ -257,6 +263,7 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
       const data = await res.json()
       setActivities(data.activities || [])
       setLossHistory(data.loss_history || [])
+      setReactivationCycles(data.reactivation_cycles || [])
     }
     setActLoading(false)
   }
@@ -281,6 +288,80 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
 
   return (
     <div>
+      {/* Schedule Reactivation Modal */}
+      {scheduleModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.5)',
+        }} onClick={() => setScheduleModal(null)}>
+          <div style={{
+            background: '#fff', borderRadius: 14, padding: 28, width: 440,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: S.text, margin: '0 0 4px' }}>
+              Schedule reactivation for {scheduleModal.prospect.name}
+            </h3>
+            <p style={{ fontSize: 12, color: S.textSecondary, marginBottom: 16 }}>Plan a future follow-up attempt</p>
+
+            <label style={{ fontSize: 12, fontWeight: 500, color: S.textSecondary, display: 'block', marginBottom: 4 }}>When</label>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+              <input type="date" value={schedDate} onChange={e => setSchedDate(e.target.value)}
+                style={{ flex: 1, border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '8px 12px', fontSize: 13 }} />
+              {[30, 60, 90].map(d => (
+                <button key={d} onClick={() => setSchedDate(new Date(Date.now() + d * 86400000).toISOString().slice(0, 10))}
+                  style={{
+                    padding: '6px 12px', fontSize: 11, fontWeight: 500, borderRadius: S.radiusSm,
+                    border: `1px solid ${S.border}`, background: S.bg, color: S.textSecondary, cursor: 'pointer',
+                  }}>{d}d</button>
+              ))}
+            </div>
+
+            <label style={{ fontSize: 12, fontWeight: 500, color: S.textSecondary, display: 'block', marginBottom: 4 }}>Reason</label>
+            <select value={schedReason} onChange={e => setSchedReason(e.target.value)}
+              style={{ width: '100%', border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '8px 12px', fontSize: 13, marginBottom: 14, background: S.bg }}>
+              {REACTIVATION_REASONS.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+            </select>
+
+            <label style={{ fontSize: 12, fontWeight: 500, color: S.textSecondary, display: 'block', marginBottom: 4 }}>Custom message (optional)</label>
+            <textarea value={schedMessage} onChange={e => setSchedMessage(e.target.value)} rows={3}
+              placeholder="Leave blank to use the default template for this loss reason"
+              style={{ width: '100%', border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '8px 12px', fontSize: 13, marginBottom: 20, fontFamily: S.font, boxSizing: 'border-box', resize: 'vertical' }} />
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button onClick={() => setScheduleModal(null)}
+                style={{ padding: '8px 20px', fontSize: 13, borderRadius: S.radiusSm, border: `1px solid ${S.border}`, background: S.bg, color: S.textSecondary, cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button
+                disabled={!schedDate}
+                onClick={async () => {
+                  await fetch('/api/admin/genx/reactivation/schedule', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      prospect_id: scheduleModal.prospect.id,
+                      scheduled_at: new Date(schedDate).toISOString(),
+                      reason: schedReason,
+                      custom_message: schedMessage || undefined,
+                    }),
+                  })
+                  setScheduleModal(null)
+                  // Reload prospect detail to show new cycle
+                  loadActivities(scheduleModal.prospect.id)
+                }}
+                style={{
+                  padding: '8px 20px', fontSize: 13, fontWeight: 600, borderRadius: S.radiusSm,
+                  border: 'none', cursor: schedDate ? 'pointer' : 'not-allowed',
+                  background: schedDate ? S.purple : S.border, color: schedDate ? '#fff' : S.textMuted,
+                  opacity: schedDate ? 1 : 0.6,
+                }}>
+                Schedule
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Loss Reason Modal */}
       {lossModal && (
         <LossReasonModal
@@ -574,6 +655,49 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
                               Reactivate
                             </button>
                           </div>
+                        )}
+
+                        {/* Reactivation History */}
+                        {reactivationCycles.length > 0 && (
+                          <div style={{ background: S.purpleLight, borderRadius: S.radiusSm, padding: 12, marginBottom: 10, border: `1px solid ${S.purple}20` }}>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: S.purple, textTransform: 'uppercase', marginBottom: 6 }}>REACTIVATION HISTORY</div>
+                            {reactivationCycles.map((rc, i) => (
+                              <div key={rc.id} style={{ fontSize: 11, color: S.textSecondary, padding: '3px 0', borderBottom: i < reactivationCycles.length - 1 ? `1px solid ${S.purple}10` : 'none' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span>
+                                    {new Date(rc.scheduled_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                    {' — '}
+                                    <span style={{
+                                      fontWeight: 600,
+                                      color: rc.status === 'converted' ? S.green : rc.status === 'declined_again' ? S.red : rc.status === 'sent' ? S.accent : rc.status === 'expired' ? S.textMuted : S.purple,
+                                    }}>
+                                      {rc.status === 'scheduled' ? 'Scheduled' : rc.status === 'sent' ? 'Sent' : rc.status === 'converted' ? 'Converted' : rc.status === 'declined_again' ? 'Declined again' : rc.status === 'skipped' ? 'Skipped' : rc.status === 'expired' ? 'Expired' : rc.status}
+                                    </span>
+                                  </span>
+                                  {rc.executed_by && <span style={{ fontSize: 10, color: S.textMuted }}>{rc.executed_by}</span>}
+                                </div>
+                                {rc.result_note && <div style={{ fontSize: 10, color: S.textMuted, marginTop: 1 }}>{rc.result_note}</div>}
+                              </div>
+                            ))}
+                            <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
+                              {reactivationCycles.some(rc => rc.status === 'scheduled') && (
+                                <span style={{ fontSize: 10, color: S.purple }}>
+                                  {reactivationCycles.filter(rc => rc.status === 'scheduled').length} upcoming
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Schedule Reactivation button for lost/declined prospects */}
+                        {(p.stage === 'lost' || p.stage === 'declined') && (
+                          <button onClick={() => { setScheduleModal({ prospect: p }); setSchedDate(''); setSchedReason('scheduled_manual'); setSchedMessage('') }}
+                            style={{
+                              marginBottom: 10, background: S.purpleLight, color: S.purple, border: `1px solid ${S.purple}30`,
+                              borderRadius: S.radiusSm, padding: '6px 14px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                            }}>
+                            Schedule Reactivation
+                          </button>
                         )}
 
                         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
