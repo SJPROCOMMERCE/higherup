@@ -148,23 +148,15 @@ export default async function AdminGenxPage() {
       recent_activities: activities,
     }
 
-    // DIAGNOSTIC: render raw data instead of AdminGenxClient to isolate crash
     return (
-      <div style={{ padding: 40, fontFamily: 'monospace', fontSize: 13 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700 }}>GENX CRM — Diagnostic Mode</h1>
-        <p>If you see this, the data fetching works. The crash is in AdminGenxClient.</p>
-        <pre style={{ background: '#f5f5f5', padding: 16, borderRadius: 8, overflow: 'auto', maxHeight: 600 }}>
-{JSON.stringify({
-  lgs_count: lgs.length,
-  prospects_count: prospects.length,
-  communities_count: rawCommunities.length,
-  scorecards_count: rawScorecards.length,
-  payouts_count: rawPayouts.length,
-  kpis: dashboardData.kpis,
-  first_lg: lgs[0] || null,
-}, null, 2)}
-        </pre>
-      </div>
+      <AdminGenxClient
+        lgs={lgs}
+        prospects={prospects as never[]}
+        communities={rawCommunities as never[]}
+        scorecards={rawScorecards as never[]}
+        pendingPayouts={rawPayouts as never[]}
+        dashboardData={dashboardData as never}
+      />
     )
   } catch (err) {
     // Fallback: show basic page with error info
