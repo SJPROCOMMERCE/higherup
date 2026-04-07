@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { S, type LG, type Payout, type ProspectActivity, type Scorecard } from '../AdminGenxClient'
+import { S, type LG, type Payout, type ProspectActivity, type Scorecard } from '../shared'
 
 const STAGE_LABELS: Record<string, string> = {
   lead: 'Lead', contacted: 'Contacted', interested: 'Interested',

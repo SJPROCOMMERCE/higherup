@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { S, type Scorecard } from '../AdminGenxClient'
+import { S, type Scorecard } from '../shared'
 
 const FIELDS = [
   { key: 'calls_made', label: 'Calls Made', color: S.green },

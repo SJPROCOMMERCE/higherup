@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { S, type LG, type Community, type Payout } from '../AdminGenxClient'
+import { S, type LG, type Community, type Payout } from '../shared'
 
 const STATUS_COLORS: Record<string, string> = {
   active: S.green, pending: S.yellow, paused: S.textSecondary, deactivated: S.red,
