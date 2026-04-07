@@ -17,9 +17,17 @@ export type Prospect = {
 }
 export type Community = {
   id: string; name: string; platform: string; url: string | null
-  description: string | null; member_count: number; prospect_count: number
-  lg_count: number; status: string; tags: string[]; notes: string | null
-  created_at: string; updated_at: string
+  description: string | null; member_count: number; status: string
+  tags: string[]; notes: string | null; created_at: string; updated_at: string
+  // VA community tracking
+  quality_rating: number; priority: string
+  admin_name: string | null; admin_handle: string | null
+  admin_contacted: boolean; admin_notes: string | null
+  we_are_member: boolean; joined_date: string | null
+  posts_made: number; last_posted_at: string | null
+  vas_from_here: number; total_products_from_here: number
+  revenue_from_here: number; lg_earnings_from_here: number
+  active_lgs: string[]
 }
 export type Scorecard = {
   id: string; score_date: string; calls_made: number; dms_sent: number
