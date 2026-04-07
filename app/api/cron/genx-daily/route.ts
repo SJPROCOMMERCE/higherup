@@ -56,6 +56,14 @@ export async function GET(request: Request) {
     }).eq('id', link.id)
   }
 
+  // Reactivation: expire cycles not executed within 14 days of scheduled date
+  const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString()
+  const { data: expiredCycles } = await supabase.from('admin_reactivation_cycles').update({
+    status: 'expired',
+    result_note: 'Expired — not executed within 14 days of scheduled date',
+  }).eq('status', 'scheduled').lt('scheduled_at', fourteenDaysAgo).select('id')
+  console.log(`[genx-daily] Expired ${expiredCycles?.length || 0} reactivation cycles`)
+
   // Cleanup: pulse events older than 7 days
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
   await supabase.from('lg_pulse_events').delete().lt('created_at', sevenDaysAgo)
