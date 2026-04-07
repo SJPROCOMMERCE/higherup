@@ -244,6 +244,30 @@ export const PROSPECT_TYPES = [
   { key: 'content_creator', label: 'Content Creator' },
 ] as const
 
+// ── Community Posts ──
+export type CommunityPost = {
+  id: string; community_id: string; script_id: string | null
+  title: string | null; content: string; posted_by: string | null
+  posted_at: string; platform: string | null
+  dms_received: number; replies_received: number; prospects_generated: number
+  notes: string | null; created_at: string; updated_at: string
+  admin_outreach_scripts?: { title: string; category: string } | null
+}
+
+// ── Script History on Prospect ──
+export type ScriptHistoryEntry = {
+  script_id: string; script_title: string; script_category: string
+  sent_by: string | null; sent_at: string
+  outcome: string; response_time_minutes: number | null
+}
+
+export type ScriptHistoryData = {
+  history: ScriptHistoryEntry[]
+  prospect_type: string
+  best_for_type: { title: string; rate: number; total: number } | null
+  suggestion: { title: string; reason: string } | null
+}
+
 // ── Styles ──
 export const S = {
   bg: '#FFFFFF',

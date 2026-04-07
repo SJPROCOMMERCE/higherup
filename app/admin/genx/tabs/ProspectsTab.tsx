@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { S, PIPELINE_STAGES, TERMINAL_STAGES, ALL_STAGES, LOSS_REASONS, LOSS_CATEGORY_COLORS, REACTIVATION_REASONS, getLossReasonLabel, type Prospect, type Community, type LossHistoryEntry, type ReactivationCycle, type OutreachScript } from '../shared'
+import { S, PIPELINE_STAGES, TERMINAL_STAGES, ALL_STAGES, LOSS_REASONS, LOSS_CATEGORY_COLORS, REACTIVATION_REASONS, getLossReasonLabel, type Prospect, type Community, type LossHistoryEntry, type ReactivationCycle, type OutreachScript, type ScriptHistoryData } from '../shared'
 
 const SOURCES = ['manual', 'referral', 'community', 'inbound', 'event', 'facebook', 'whatsapp', 'linkedin', 'onlinejobs']
 const PRIORITIES = ['low', 'normal', 'high', 'urgent']
@@ -173,6 +173,7 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
   const [form, setForm] = useState({ name: '', email: '', phone: '', platform: '', handle: '', source: 'manual', community_id: '', priority: 'normal', notes: '' })
   const [actForm, setActForm] = useState({ activity_type: 'call', description: '', direction: '' as '' | 'inbound' | 'outbound', channel_used: '', sender: '', script_id: '', script_modified: false, actual_message_sent: '' })
   const [scripts, setScripts] = useState<OutreachScript[]>([])
+  const [scriptHistory, setScriptHistory] = useState<ScriptHistoryData | null>(null)
 
   // Load scripts once
   useEffect(() => {
@@ -266,12 +267,20 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
     if (expandedId === prospectId) { setExpandedId(null); return }
     setExpandedId(prospectId)
     setActLoading(true)
-    const res = await fetch(`/api/admin/genx/prospects/${prospectId}`)
-    if (res.ok) {
-      const data = await res.json()
+    setScriptHistory(null)
+    const [detailRes, scriptRes] = await Promise.all([
+      fetch(`/api/admin/genx/prospects/${prospectId}`),
+      fetch(`/api/admin/genx/prospects/${prospectId}/script-history`),
+    ])
+    if (detailRes.ok) {
+      const data = await detailRes.json()
       setActivities(data.activities || [])
       setLossHistory(data.loss_history || [])
       setReactivationCycles(data.reactivation_cycles || [])
+    }
+    if (scriptRes.ok) {
+      const data = await scriptRes.json()
+      setScriptHistory(data)
     }
     setActLoading(false)
   }
@@ -453,6 +462,48 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
           </div>
         </div>
       )}
+
+      {/* Loss Summary Bar — shows when filtering lost/declined */}
+      {(filterStage === 'lost' || filterStage === 'declined') && (() => {
+        const lostProspects = prospects.filter(p => p.stage === 'lost' || p.stage === 'declined')
+        const reasonCounts: Record<string, number> = {}
+        for (const p of lostProspects) {
+          if (p.loss_reason) reasonCounts[p.loss_reason] = (reasonCounts[p.loss_reason] || 0) + 1
+        }
+        const sorted = Object.entries(reasonCounts).sort((a, b) => b[1] - a[1])
+        const topReason = sorted[0]
+        const topPct = topReason ? Math.round(topReason[1] / lostProspects.length * 100) : 0
+        const readyForReactivation = lostProspects.filter(p => p.revisit_at && new Date(p.revisit_at) <= new Date()).length
+        return (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', marginBottom: 16,
+            background: S.redLight, borderRadius: S.radius, border: '1px solid #FECACA',
+          }}>
+            <div style={{ fontSize: 13, color: S.text }}>
+              <strong>{lostProspects.length}</strong> lost/declined prospect{lostProspects.length !== 1 ? 's' : ''}.
+              {topReason && (
+                <span> Top reason: <strong style={{ color: S.red }}>{getLossReasonLabel(topReason[0])}</strong> ({topPct}%).</span>
+              )}
+              {readyForReactivation > 0 && (
+                <span style={{ color: S.green, fontWeight: 600, marginLeft: 8 }}>{readyForReactivation} ready for reactivation.</span>
+              )}
+            </div>
+            {sorted.length > 1 && (
+              <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
+                {sorted.slice(0, 4).map(([reason, count]) => (
+                  <span key={reason} style={{
+                    fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 4,
+                    background: `${LOSS_CATEGORY_COLORS[LOSS_REASONS.find(r => r.id === reason)?.category || 'other'] || S.textMuted}15`,
+                    color: LOSS_CATEGORY_COLORS[LOSS_REASONS.find(r => r.id === reason)?.category || 'other'] || S.textMuted,
+                  }}>
+                    {getLossReasonLabel(reason).split(' ').slice(0, 3).join(' ')} ({count})
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Pipeline View */}
       {view === 'pipeline' && (
@@ -854,6 +905,42 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
                             ))
                           }
                         </div>
+
+                        {/* Script History on Prospect Detail */}
+                        {scriptHistory && scriptHistory.history.length > 0 && (
+                          <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${S.borderLight}` }}>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: S.purple, textTransform: 'uppercase', marginBottom: 8 }}>SCRIPTS USED ON THIS PROSPECT</div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              {scriptHistory.history.map((h, i) => {
+                                const outcomeColor = h.outcome === 'converted' ? S.green : h.outcome === 'replied' || h.outcome === 'interested' ? S.accent : h.outcome === 'declined' ? S.red : S.textMuted
+                                const outcomeLabel = h.outcome === 'no_reply' ? 'No reply' : h.outcome.charAt(0).toUpperCase() + h.outcome.slice(1)
+                                return (
+                                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '4px 0', fontSize: 11 }}>
+                                    <span style={{ color: S.textMuted, width: 16, flexShrink: 0 }}>{i + 1}.</span>
+                                    <span style={{ color: S.purple, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      &ldquo;{h.script_title}&rdquo;
+                                    </span>
+                                    {h.sent_by && <span style={{ color: S.textMuted }}>by {h.sent_by}</span>}
+                                    <span style={{ color: S.textMuted }}>{new Date(h.sent_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}</span>
+                                    <span style={{ fontWeight: 600, color: outcomeColor, fontSize: 10, padding: '1px 6px', borderRadius: 4, background: `${outcomeColor}10` }}>
+                                      {outcomeLabel}
+                                    </span>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                            {scriptHistory.best_for_type && (
+                              <div style={{ marginTop: 8, fontSize: 11, color: S.textSecondary, padding: '6px 10px', background: S.greenLight, borderRadius: S.radiusSm }}>
+                                Best script for {scriptHistory.prospect_type.replace(/_/g, ' ')}: <strong style={{ color: S.green }}>&ldquo;{scriptHistory.best_for_type.title}&rdquo;</strong> ({scriptHistory.best_for_type.rate}% reply rate, {scriptHistory.best_for_type.total} sends)
+                              </div>
+                            )}
+                            {scriptHistory.suggestion && (
+                              <div style={{ marginTop: 4, fontSize: 11, color: S.textSecondary, padding: '6px 10px', background: S.yellowLight, borderRadius: S.radiusSm }}>
+                                Suggestion: Try <strong style={{ color: S.yellow }}>&ldquo;{scriptHistory.suggestion.title}&rdquo;</strong> — {scriptHistory.suggestion.reason}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

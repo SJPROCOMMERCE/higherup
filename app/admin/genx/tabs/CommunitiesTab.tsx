@@ -1,6 +1,6 @@
 'use client'
-import { useState } from 'react'
-import { S, type Community } from '../shared'
+import { useState, useEffect, useCallback } from 'react'
+import { S, type Community, type CommunityPost } from '../shared'
 
 const PLATFORMS = ['facebook', 'whatsapp', 'telegram', 'linkedin', 'discord', 'onlinejobs', 'other']
 const STATUSES = ['discovered', 'monitoring', 'active', 'paused', 'blacklisted']
@@ -119,6 +119,55 @@ export default function CommunitiesTab({ communities, onUpdate }: Props) {
     })
     setShowAdd(false)
     setEditId(null)
+  }
+
+  // Community posts state
+  const [posts, setPosts] = useState<CommunityPost[]>([])
+  const [postsLoading, setPostsLoading] = useState(false)
+  const [showNewPost, setShowNewPost] = useState(false)
+  const [postForm, setPostForm] = useState({ title: '', content: '', posted_by: '', platform: '', dms_received: 0, replies_received: 0, prospects_generated: 0, notes: '' })
+  const [editPostId, setEditPostId] = useState<string | null>(null)
+  const [editPostForm, setEditPostForm] = useState({ dms_received: 0, replies_received: 0, prospects_generated: 0, notes: '' })
+
+  const loadPosts = useCallback(async (communityId: string) => {
+    setPostsLoading(true)
+    const res = await fetch(`/api/admin/genx/community-posts?community_id=${communityId}`)
+    if (res.ok) { const data = await res.json(); setPosts(data.posts || []) }
+    setPostsLoading(false)
+  }, [])
+
+  // Load posts when expanding a community
+  useEffect(() => {
+    if (expandedId) loadPosts(expandedId)
+  }, [expandedId, loadPosts])
+
+  async function addPost(communityId: string) {
+    if (!postForm.content.trim()) return
+    const res = await fetch('/api/admin/genx/community-posts', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...postForm, community_id: communityId, platform: postForm.platform || communities.find(c => c.id === communityId)?.platform }),
+    })
+    if (res.ok) {
+      setShowNewPost(false)
+      setPostForm({ title: '', content: '', posted_by: '', platform: '', dms_received: 0, replies_received: 0, prospects_generated: 0, notes: '' })
+      loadPosts(communityId)
+      // Update community posts_made count locally
+      const c = communities.find(c2 => c2.id === communityId)
+      if (c) onUpdate(communities.map(c2 => c2.id === communityId ? { ...c2, posts_made: (c2.posts_made || 0) + 1, last_posted_at: new Date().toISOString() } : c2))
+    }
+  }
+
+  async function updatePostStats(postId: string) {
+    await fetch(`/api/admin/genx/community-posts/${postId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editPostForm),
+    })
+    setEditPostId(null)
+    if (expandedId) loadPosts(expandedId)
+  }
+
+  async function deletePost(postId: string, communityId: string) {
+    await fetch(`/api/admin/genx/community-posts/${postId}`, { method: 'DELETE' })
+    loadPosts(communityId)
   }
 
   function daysAgo(dateStr: string | null): string {
@@ -430,6 +479,117 @@ export default function CommunitiesTab({ communities, onUpdate }: Props) {
                       Delete Community
                     </button>
                   </div>
+                </div>
+
+                {/* Community Posts Section */}
+                <div style={{ marginTop: 20, paddingTop: 20, borderTop: `1px solid ${S.border}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <h4 style={{ fontSize: 13, fontWeight: 600, color: S.text, margin: 0 }}>Posts & Outreach in this Community</h4>
+                    <button onClick={() => { setShowNewPost(true); setPostForm({ ...postForm, platform: c.platform }) }}
+                      style={{ fontSize: 11, fontWeight: 600, color: S.accent, background: S.accentLight, border: `1px solid ${S.accent}30`, borderRadius: S.radiusSm, padding: '4px 14px', cursor: 'pointer' }}>
+                      + Log Post
+                    </button>
+                  </div>
+
+                  {/* New post form */}
+                  {showNewPost && (
+                    <div style={{ background: S.bg, borderRadius: S.radiusSm, border: `1px solid ${S.border}`, padding: 14, marginBottom: 12 }}>
+                      <input placeholder="Post title (optional)" value={postForm.title} onChange={e => setPostForm({ ...postForm, title: e.target.value })}
+                        style={{ width: '100%', border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '6px 10px', fontSize: 12, marginBottom: 8, boxSizing: 'border-box' }} />
+                      <textarea placeholder="Full post text *" value={postForm.content} onChange={e => setPostForm({ ...postForm, content: e.target.value })} rows={3}
+                        style={{ width: '100%', border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '6px 10px', fontSize: 12, marginBottom: 8, fontFamily: S.font, boxSizing: 'border-box', resize: 'vertical' }} />
+                      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          {['safouane', 'joep'].map(s => (
+                            <button key={s} onClick={() => setPostForm({ ...postForm, posted_by: s })}
+                              style={{
+                                padding: '4px 12px', fontSize: 11, borderRadius: S.radiusSm, cursor: 'pointer', textTransform: 'capitalize',
+                                border: `1px solid ${postForm.posted_by === s ? S.accent : S.border}`,
+                                background: postForm.posted_by === s ? S.accentLight : S.bg,
+                                color: postForm.posted_by === s ? S.accent : S.textSecondary,
+                                fontWeight: postForm.posted_by === s ? 600 : 400,
+                              }}>{s}</button>
+                          ))}
+                        </div>
+                        <input type="number" placeholder="DMs" value={postForm.dms_received || ''} onChange={e => setPostForm({ ...postForm, dms_received: parseInt(e.target.value) || 0 })}
+                          style={{ width: 60, border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '4px 8px', fontSize: 11 }} />
+                        <input type="number" placeholder="Replies" value={postForm.replies_received || ''} onChange={e => setPostForm({ ...postForm, replies_received: parseInt(e.target.value) || 0 })}
+                          style={{ width: 60, border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '4px 8px', fontSize: 11 }} />
+                        <input type="number" placeholder="Prospects" value={postForm.prospects_generated || ''} onChange={e => setPostForm({ ...postForm, prospects_generated: parseInt(e.target.value) || 0 })}
+                          style={{ width: 70, border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '4px 8px', fontSize: 11 }} />
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button onClick={() => addPost(c.id)} disabled={!postForm.content.trim()}
+                          style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, borderRadius: S.radiusSm, border: 'none', background: postForm.content.trim() ? S.accent : S.border, color: postForm.content.trim() ? '#fff' : S.textMuted, cursor: postForm.content.trim() ? 'pointer' : 'not-allowed' }}>
+                          Save Post
+                        </button>
+                        <button onClick={() => setShowNewPost(false)}
+                          style={{ padding: '6px 14px', fontSize: 11, borderRadius: S.radiusSm, border: `1px solid ${S.border}`, background: S.bg, color: S.textSecondary, cursor: 'pointer' }}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Posts list */}
+                  {postsLoading ? (
+                    <div style={{ fontSize: 11, color: S.textMuted }}>Loading posts...</div>
+                  ) : posts.length === 0 ? (
+                    <div style={{ fontSize: 12, color: S.textMuted }}>No posts logged yet</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {posts.map(p => (
+                        <div key={p.id} style={{ background: S.bg, borderRadius: S.radiusSm, border: `1px solid ${S.borderLight}`, padding: '10px 14px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                            <div>
+                              {p.title && <div style={{ fontSize: 12, fontWeight: 600, color: S.text }}>{p.title}</div>}
+                              <div style={{ fontSize: 11, color: S.textMuted }}>
+                                {new Date(p.posted_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                {p.posted_by && <span> · by {p.posted_by}</span>}
+                                {p.admin_outreach_scripts?.title && (
+                                  <span style={{ color: S.purple }}> · Script: {p.admin_outreach_scripts.title}</span>
+                                )}
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 12 }}>
+                              <div style={{ textAlign: 'center' }}>
+                                <div style={{ fontWeight: 700, color: S.accent }}>{p.dms_received}</div>
+                                <div style={{ fontSize: 9, color: S.textMuted }}>DMs</div>
+                              </div>
+                              <div style={{ textAlign: 'center' }}>
+                                <div style={{ fontWeight: 700, color: S.green }}>{p.prospects_generated}</div>
+                                <div style={{ fontSize: 9, color: S.textMuted }}>Prospects</div>
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ fontSize: 12, color: S.textSecondary, lineHeight: 1.5, whiteSpace: 'pre-wrap', maxHeight: 80, overflow: 'hidden' }}>
+                            {p.content}
+                          </div>
+                          <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                            {editPostId === p.id ? (
+                              <>
+                                <input type="number" placeholder="DMs" value={editPostForm.dms_received} onChange={e => setEditPostForm({ ...editPostForm, dms_received: parseInt(e.target.value) || 0 })}
+                                  style={{ width: 50, border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '3px 6px', fontSize: 11 }} />
+                                <input type="number" placeholder="Replies" value={editPostForm.replies_received} onChange={e => setEditPostForm({ ...editPostForm, replies_received: parseInt(e.target.value) || 0 })}
+                                  style={{ width: 50, border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '3px 6px', fontSize: 11 }} />
+                                <input type="number" placeholder="Prospects" value={editPostForm.prospects_generated} onChange={e => setEditPostForm({ ...editPostForm, prospects_generated: parseInt(e.target.value) || 0 })}
+                                  style={{ width: 60, border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '3px 6px', fontSize: 11 }} />
+                                <button onClick={() => updatePostStats(p.id)}
+                                  style={{ fontSize: 10, color: S.accent, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Save</button>
+                                <button onClick={() => setEditPostId(null)}
+                                  style={{ fontSize: 10, color: S.textMuted, background: 'none', border: 'none', cursor: 'pointer' }}>Cancel</button>
+                              </>
+                            ) : (
+                              <>
+                                <button onClick={() => { setEditPostId(p.id); setEditPostForm({ dms_received: p.dms_received, replies_received: p.replies_received, prospects_generated: p.prospects_generated, notes: p.notes || '' }) }}
+                                  style={{ fontSize: 10, color: S.accent, background: 'none', border: 'none', cursor: 'pointer' }}>Update stats</button>
+                                <button onClick={() => deletePost(p.id, c.id)}
+                                  style={{ fontSize: 10, color: S.red, background: 'none', border: 'none', cursor: 'pointer' }}>Delete</button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
