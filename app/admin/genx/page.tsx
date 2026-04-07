@@ -109,11 +109,13 @@ export default async function AdminGenxPage() {
       admin_prospects: a.prospect_id ? { name: prospectNames[a.prospect_id as string] || 'Prospect' } : null,
     }))
 
-    // Pipeline counts
-    const stages = ['lead', 'contacted', 'interested', 'scheduled', 'converted', 'lost']
+    // Pipeline counts (new 10-stage pipeline + terminal)
+    const allStages = ['identified','contacted','replied','interested','pitch_sent','call_scheduled','call_done','signed_up','onboarding','active_lg','declined','lost','revisit_later']
     const pipeline: Record<string, number> = {}
-    for (const s of stages) pipeline[s] = 0
+    for (const s of allStages) pipeline[s] = 0
     for (const p of rawProspects) pipeline[p.stage as string] = (pipeline[p.stage as string] || 0) + 1
+
+    const terminalStages = ['declined', 'lost', 'revisit_later']
 
     // KPIs
     const totalEarnings = Object.values(earnedMap).reduce((s, v) => s + v, 0)
@@ -121,13 +123,13 @@ export default async function AdminGenxPage() {
     const activeLGs = lgs.filter(l => l.status === 'active').length
     const pendingLGs = lgs.filter(l => l.status === 'pending').length
     const totalProspects = rawProspects.length
-    const converted = pipeline['converted'] || 0
-    const conversionRate = totalProspects > 0 ? ((converted / totalProspects) * 100).toFixed(1) : '0.0'
+    const activeLgProspects = pipeline['active_lg'] || 0
+    const conversionRate = totalProspects > 0 ? ((activeLgProspects / totalProspects) * 100).toFixed(1) : '0.0'
     const overdue = rawProspects.filter(p =>
-      p.follow_up_date && (p.follow_up_date as string) < today && !['converted', 'lost'].includes(p.stage as string)
+      p.follow_up_date && (p.follow_up_date as string) < today && !terminalStages.concat(['active_lg']).includes(p.stage as string)
     ).length
     const highPriority = rawProspects.filter(p =>
-      (p.priority === 'high' || p.priority === 'urgent') && !['converted', 'lost'].includes(p.stage as string)
+      (p.priority === 'high' || p.priority === 'urgent') && !terminalStages.concat(['active_lg']).includes(p.stage as string)
     ).length
 
     const dashboardData = {
@@ -135,7 +137,7 @@ export default async function AdminGenxPage() {
         active_lgs: activeLGs,
         pending_lgs: pendingLGs,
         total_prospects: totalProspects,
-        active_prospects: totalProspects - (pipeline['converted'] || 0) - (pipeline['lost'] || 0),
+        active_prospects: totalProspects - terminalStages.reduce((s, k) => s + (pipeline[k] || 0), 0) - (pipeline['active_lg'] || 0),
         conversion_rate: conversionRate,
         month_earnings: totalEarnings,
         pending_payouts: pendingPayoutsAmount,
