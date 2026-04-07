@@ -206,6 +206,44 @@ export const REACTIVATION_REASONS = [
   { id: 'competitor_change', label: 'Competitor changed or stopped' },
 ] as const
 
+// ── Script Tracking ──
+export type OutreachScript = {
+  id: string; category: string; channel: string; target_prospect_type: string
+  title: string; content: string; description: string | null
+  times_used: number; times_replied: number; times_converted: number
+  reply_rate: number; conversion_rate: number
+  created_by: string | null; is_default: boolean; is_active: boolean
+  sort_order: number; created_at: string; updated_at: string
+  performance_30d?: { total: number; replied: number; converted: number }
+}
+
+export type ScriptAnalyticsData = {
+  scripts: OutreachScript[]
+  best_by_prospect_type: Record<string, { script_id: string; script_title: string; rate: number; total: number }>
+  best_by_channel: Record<string, { script_id: string; script_title: string; rate: number; total: number }>
+  person_performance: { person: string; total: number; replied: number; reply_rate: number; best_script: string | null; best_rate: number }[]
+  recommendations: string[]
+}
+
+export const SCRIPT_CATEGORIES = [
+  { key: 'first_contact', label: 'First Contact' },
+  { key: 'follow_up', label: 'Follow Up' },
+  { key: 'objection_handling', label: 'Objection Handling' },
+  { key: 'closing', label: 'Closing' },
+  { key: 'reactivation', label: 'Reactivation' },
+  { key: 'community_post', label: 'Community Post' },
+  { key: 'call_intro', label: 'Call Intro' },
+  { key: 'custom', label: 'Custom' },
+] as const
+
+export const PROSPECT_TYPES = [
+  { key: 'any', label: 'Any' },
+  { key: 'individual', label: 'Individual VA' },
+  { key: 'agency_owner', label: 'Agency Owner' },
+  { key: 'community_leader', label: 'Community Leader' },
+  { key: 'content_creator', label: 'Content Creator' },
+] as const
+
 // ── Styles ──
 export const S = {
   bg: '#FFFFFF',

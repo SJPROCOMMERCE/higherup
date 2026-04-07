@@ -5,6 +5,7 @@ import ProspectsTab from './tabs/ProspectsTab'
 import LGsTab from './tabs/LGsTab'
 import CommunitiesTab from './tabs/CommunitiesTab'
 import ScorecardTab from './tabs/ScorecardTab'
+import ScriptsTab from './tabs/ScriptsTab'
 import { S } from './shared'
 import type { LG, Prospect, Community, Scorecard, Payout, ProspectActivity } from './shared'
 
@@ -18,6 +19,7 @@ const TABS = [
   { key: 'lgs', label: 'Lead Generators' },
   { key: 'communities', label: 'Communities' },
   { key: 'scorecard', label: 'Scorecard' },
+  { key: 'scripts', label: 'Scripts' },
 ] as const
 
 type TabKey = typeof TABS[number]['key']
@@ -125,6 +127,9 @@ export default function AdminGenxClient({ lgs: initialLGs, prospects: initialPro
             scorecards={scorecards}
             onUpdate={setScorecards}
           />
+        )}
+        {activeTab === 'scripts' && (
+          <ScriptsTab />
         )}
       </div>
     </div>
