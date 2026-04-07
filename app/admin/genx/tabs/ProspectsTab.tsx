@@ -1,6 +1,6 @@
 'use client'
-import { useState } from 'react'
-import { S, PIPELINE_STAGES, TERMINAL_STAGES, ALL_STAGES, LOSS_REASONS, LOSS_CATEGORY_COLORS, REACTIVATION_REASONS, getLossReasonLabel, type Prospect, type Community, type LossHistoryEntry, type ReactivationCycle } from '../shared'
+import { useState, useEffect } from 'react'
+import { S, PIPELINE_STAGES, TERMINAL_STAGES, ALL_STAGES, LOSS_REASONS, LOSS_CATEGORY_COLORS, REACTIVATION_REASONS, getLossReasonLabel, type Prospect, type Community, type LossHistoryEntry, type ReactivationCycle, type OutreachScript } from '../shared'
 
 const SOURCES = ['manual', 'referral', 'community', 'inbound', 'event', 'facebook', 'whatsapp', 'linkedin', 'onlinejobs']
 const PRIORITIES = ['low', 'normal', 'high', 'urgent']
@@ -17,6 +17,8 @@ type ProspectActivity = {
   old_stage: string | null; new_stage: string | null; created_at: string
   direction: string | null; sender: string | null; channel_used: string | null
   response_time_minutes: number | null
+  script_id: string | null; script_title: string | null; script_modified: boolean | null
+  actual_message_sent: string | null
 }
 
 type Props = {
@@ -169,7 +171,13 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
   const [dragOverStage, setDragOverStage] = useState<string | null>(null)
 
   const [form, setForm] = useState({ name: '', email: '', phone: '', platform: '', handle: '', source: 'manual', community_id: '', priority: 'normal', notes: '' })
-  const [actForm, setActForm] = useState({ activity_type: 'call', description: '', direction: '' as '' | 'inbound' | 'outbound', channel_used: '', sender: '' })
+  const [actForm, setActForm] = useState({ activity_type: 'call', description: '', direction: '' as '' | 'inbound' | 'outbound', channel_used: '', sender: '', script_id: '', script_modified: false, actual_message_sent: '' })
+  const [scripts, setScripts] = useState<OutreachScript[]>([])
+
+  // Load scripts once
+  useEffect(() => {
+    fetch('/api/admin/genx/outreach-scripts').then(r => r.json()).then(d => setScripts(d.scripts || [])).catch(() => {})
+  }, [])
 
   // Loss reason modal state
   const [lossModal, setLossModal] = useState<{ prospect: Prospect; targetStage: 'lost' | 'declined' } | null>(null)
@@ -270,17 +278,25 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
 
   async function logActivity(prospectId: string) {
     if (!actForm.description.trim() && !actForm.activity_type) return
-    const payload: Record<string, string> = { activity_type: actForm.activity_type, description: actForm.description }
+    const payload: Record<string, unknown> = { activity_type: actForm.activity_type, description: actForm.description }
     if (actForm.direction) payload.direction = actForm.direction
     if (actForm.channel_used) payload.channel_used = actForm.channel_used
     if (actForm.sender) payload.sender = actForm.sender
+    // Script tracking
+    if (actForm.script_id && actForm.direction === 'outbound') {
+      payload.script_id = actForm.script_id
+      const selectedScript = scripts.find(s => s.id === actForm.script_id)
+      if (selectedScript) payload.script_title = selectedScript.title
+      payload.script_modified = actForm.script_modified
+      if (actForm.actual_message_sent) payload.actual_message_sent = actForm.actual_message_sent
+    }
     const res = await fetch(`/api/admin/genx/prospects/${prospectId}/activity`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
     })
     if (res.ok) {
       const { activity } = await res.json()
       setActivities([activity, ...activities])
-      setActForm({ activity_type: 'call', description: '', direction: '', channel_used: '', sender: '' })
+      setActForm({ activity_type: 'call', description: '', direction: '', channel_used: '', sender: '', script_id: '', script_modified: false, actual_message_sent: '' })
     }
   }
 
@@ -758,6 +774,36 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
                             {SENDERS.map(s => <option key={s} value={s}>{s}</option>)}
                           </select>
                         </div>
+                        {/* Script selector (only for outbound) */}
+                        {actForm.direction === 'outbound' && scripts.length > 0 && (
+                          <div style={{ marginBottom: 6 }}>
+                            <select value={actForm.script_id} onChange={e => setActForm({ ...actForm, script_id: e.target.value })}
+                              style={{ width: '100%', border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '5px 8px', fontSize: 11, background: S.bg }}>
+                              <option value="">Script used (optional)</option>
+                              {(() => {
+                                const cats = [...new Set(scripts.map(s => s.category))]
+                                return cats.map(cat => (
+                                  <optgroup key={cat} label={cat.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}>
+                                    {scripts.filter(s => s.category === cat).map(s => (
+                                      <option key={s.id} value={s.id}>
+                                        {s.title}{s.reply_rate > 0 ? ` (${s.reply_rate}%)` : ''}
+                                      </option>
+                                    ))}
+                                  </optgroup>
+                                ))
+                              })()}
+                            </select>
+                            {actForm.script_id && (
+                              <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: S.textSecondary, cursor: 'pointer' }}>
+                                  <input type="checkbox" checked={actForm.script_modified} onChange={e => setActForm({ ...actForm, script_modified: e.target.checked })}
+                                    style={{ width: 12, height: 12 }} />
+                                  Modified
+                                </label>
+                              </div>
+                            )}
+                          </div>
+                        )}
                         <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                           <input placeholder="Description..." value={actForm.description} onChange={e => setActForm({ ...actForm, description: e.target.value })}
                             onKeyDown={e => e.key === 'Enter' && logActivity(p.id)}
@@ -792,6 +838,12 @@ export default function ProspectsTab({ prospects, communities, onUpdate }: Props
                                       </span>
                                     )}
                                   </div>
+                                  {a.script_title && (
+                                    <div style={{ fontSize: 10, color: S.purple, marginTop: 1 }}>
+                                      Script: {a.script_title}
+                                      {a.script_modified && <span style={{ marginLeft: 4, color: S.orange, fontWeight: 600 }}>(modified)</span>}
+                                    </div>
+                                  )}
                                   <div style={{ fontSize: 10, color: S.textMuted }}>
                                     {new Date(a.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                                     {a.sender && <span style={{ marginLeft: 4 }}>· {a.sender}</span>}

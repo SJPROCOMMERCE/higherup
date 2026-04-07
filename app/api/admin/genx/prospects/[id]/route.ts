@@ -1,5 +1,6 @@
 import { genxDb } from '@/lib/genx-db'
 import { cookies } from 'next/headers'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 const STAGE_TS: Record<string, string> = {
   identified: 'identified_at', contacted: 'contacted_at', replied: 'replied_at',
@@ -17,6 +18,19 @@ const REVISIT_DAYS: Record<string, number> = {
 async function checkAdmin() {
   const cookieStore = await cookies()
   return !!cookieStore.get('admin_session')?.value
+}
+
+async function recalcScriptStats(db: SupabaseClient, scriptId: string) {
+  const { data: records } = await db.from('admin_script_performance').select('outcome').eq('script_id', scriptId)
+  if (!records || records.length === 0) return
+  const total = records.length
+  const replied = records.filter(r => r.outcome === 'replied' || r.outcome === 'converted' || r.outcome === 'interested').length
+  const converted = records.filter(r => r.outcome === 'converted').length
+  await db.from('admin_outreach_scripts').update({
+    times_used: total, times_replied: replied, times_converted: converted,
+    reply_rate: total > 0 ? Math.round(replied / total * 1000) / 10 : 0,
+    conversion_rate: total > 0 ? Math.round(converted / total * 1000) / 10 : 0,
+  }).eq('id', scriptId)
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -126,6 +140,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         }
       }
 
+      // Update script performance — mark open records as 'declined'
+      await db.from('admin_script_performance').update({ outcome: 'declined' })
+        .eq('prospect_id', id).in('outcome', ['no_reply', 'replied'])
+
+      // Recalc stats for affected scripts
+      const { data: affectedScripts } = await db
+        .from('admin_script_performance')
+        .select('script_id')
+        .eq('prospect_id', id)
+      const scriptIds = [...new Set((affectedScripts || []).map(r => r.script_id))]
+      for (const sid of scriptIds) {
+        await recalcScriptStats(db, sid)
+      }
+
       // Log activity with loss reason
       await db.from('admin_prospect_activities').insert({
         prospect_id: id,
@@ -135,6 +163,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         new_stage: body.stage,
       })
     } else {
+      // On conversion (signed_up or active_lg): mark replied script records as 'converted'
+      if (body.stage === 'signed_up' || body.stage === 'active_lg') {
+        await db.from('admin_script_performance').update({ outcome: 'converted' })
+          .eq('prospect_id', id).eq('outcome', 'replied')
+
+        const { data: convScripts } = await db
+          .from('admin_script_performance')
+          .select('script_id')
+          .eq('prospect_id', id)
+        const convIds = [...new Set((convScripts || []).map(r => r.script_id))]
+        for (const sid of convIds) {
+          await recalcScriptStats(db, sid)
+        }
+      }
+
       // Normal stage change activity log
       await db.from('admin_prospect_activities').insert({
         prospect_id: id,

@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { S, PIPELINE_STAGES, TERMINAL_STAGES, LOSS_CATEGORY_COLORS, getLossReasonLabel, type LG, type Payout, type ProspectActivity, type Scorecard, type ResponseSpeedData, type LossAnalyticsData, type ReactivationData, type ReactivationCycle } from '../shared'
+import { S, PIPELINE_STAGES, TERMINAL_STAGES, LOSS_CATEGORY_COLORS, getLossReasonLabel, type LG, type Payout, type ProspectActivity, type Scorecard, type ResponseSpeedData, type LossAnalyticsData, type ReactivationData, type ReactivationCycle, type ScriptAnalyticsData } from '../shared'
 
 type FunnelStep = {
   stage: string; count: number; reached: number
@@ -56,6 +56,7 @@ export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRef
   const [speed, setSpeed] = useState<ResponseSpeedData | null>(null)
   const [lossData, setLossData] = useState<LossAnalyticsData | null>(null)
   const [reactData, setReactData] = useState<ReactivationData | null>(null)
+  const [scriptData, setScriptData] = useState<ScriptAnalyticsData | null>(null)
   const [reactLoading, setReactLoading] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   // Reactivate modal
@@ -83,11 +84,13 @@ export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRef
       fetch('/api/admin/genx/analytics/response-speed').then(r => r.json()).catch(() => null),
       fetch('/api/admin/genx/analytics/loss-reasons').then(r => r.json()).catch(() => null),
       fetch('/api/admin/genx/reactivation').then(r => r.json()).catch(() => null),
-    ]).then(([funnelData, speedData, lossAnalytics, reactivation]) => {
+      fetch('/api/admin/genx/analytics/scripts').then(r => r.json()).catch(() => null),
+    ]).then(([funnelData, speedData, lossAnalytics, reactivation, scriptAnalytics]) => {
       setFunnel(funnelData)
       setSpeed(speedData)
       setLossData(lossAnalytics)
       setReactData(reactivation)
+      setScriptData(scriptAnalytics)
       setFunnelLoading(false)
       if (speedData?.unreplied?.count != null) {
         onUnrepliedCount?.(speedData.unreplied.count)
@@ -601,6 +604,173 @@ export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRef
           </div>
         </div>
       )}
+
+      {/* ── SCRIPT PERFORMANCE ── */}
+      {scriptData && scriptData.scripts.some(s => (s.performance_30d?.total || 0) > 0) && (() => {
+        const withData = scriptData.scripts
+          .filter(s => (s.performance_30d?.total || 0) >= 3)
+          .map(s => ({
+            ...s,
+            rate30: s.performance_30d!.total > 0 ? Math.round(s.performance_30d!.replied / s.performance_30d!.total * 100) : 0,
+          }))
+          .sort((a, b) => b.rate30 - a.rate30)
+
+        const topPerformers = withData.slice(0, 5)
+        const worstPerformers = [...withData].sort((a, b) => a.rate30 - b.rate30).slice(0, 3)
+        const maxRate = topPerformers.length > 0 ? topPerformers[0].rate30 : 100
+
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>
+            {/* Leaderboard */}
+            <div style={{ background: S.surface, borderRadius: S.radius, padding: 20, border: `1px solid ${S.border}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <h3 style={{ fontSize: 15, fontWeight: 600, color: S.text, margin: 0 }}>Script Performance</h3>
+                <span style={{ fontSize: 11, color: S.textMuted }}>Last 30 days · min 3 sends</span>
+              </div>
+
+              {topPerformers.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 30, color: S.textMuted, fontSize: 13 }}>
+                  Not enough data yet. Use scripts when logging activities.
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: S.green, textTransform: 'uppercase', marginBottom: 8 }}>TOP PERFORMERS</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                    {topPerformers.map((s, i) => (
+                      <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ width: 14, fontSize: 11, fontWeight: 700, color: i === 0 ? S.green : S.textSecondary }}>{i + 1}.</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: i === 0 ? 600 : 400, color: S.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</div>
+                        </div>
+                        <span style={{ fontSize: 11, color: S.textSecondary, whiteSpace: 'nowrap' }}>{s.performance_30d!.total}x · {s.performance_30d!.replied} replies</span>
+                        <div style={{ width: 60, height: 14, background: S.bg, borderRadius: 3, overflow: 'hidden', border: `1px solid ${S.borderLight}` }}>
+                          <div style={{ width: `${maxRate > 0 ? (s.rate30 / maxRate) * 100 : 0}%`, height: '100%', background: s.rate30 >= 50 ? S.green : s.rate30 >= 30 ? S.yellow : S.red, borderRadius: 3 }} />
+                        </div>
+                        <span style={{ width: 32, fontSize: 12, fontWeight: 700, color: s.rate30 >= 50 ? S.green : s.rate30 >= 30 ? S.yellow : S.red, textAlign: 'right' }}>{s.rate30}%</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {worstPerformers.length > 0 && worstPerformers[0].rate30 < 20 && (
+                    <>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: S.red, textTransform: 'uppercase', marginBottom: 8 }}>WORST PERFORMERS</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                        {worstPerformers.filter(s => s.rate30 < 30).map((s, i) => (
+                          <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.7 }}>
+                            <span style={{ width: 14, fontSize: 11, color: S.red }}>{i + 1}.</span>
+                            <div style={{ flex: 1, fontSize: 12, color: S.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</div>
+                            <span style={{ fontSize: 11, color: S.textMuted }}>{s.performance_30d!.total}x</span>
+                            <span style={{ width: 32, fontSize: 12, fontWeight: 600, color: S.red, textAlign: 'right' }}>{s.rate30}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {/* Recommendations */}
+                  {scriptData.recommendations && scriptData.recommendations.length > 0 && (
+                    <div style={{
+                      background: S.yellowLight, borderLeft: `4px solid ${S.yellow}`,
+                      borderRadius: `0 ${S.radiusSm}px ${S.radiusSm}px 0`, padding: '8px 12px',
+                    }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: S.yellow, marginBottom: 4 }}>RECOMMENDATION</div>
+                      {scriptData.recommendations.map((rec: string, i: number) => (
+                        <div key={i} style={{ fontSize: 12, color: S.text, lineHeight: 1.5 }}>{rec}</div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Right column: Best per type + per channel + person performance */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              {/* Best per prospect type */}
+              {Object.keys(scriptData.best_by_prospect_type).length > 0 && (
+                <div style={{ background: S.surface, borderRadius: S.radius, padding: 20, border: `1px solid ${S.border}` }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 600, color: S.text, margin: '0 0 12px' }}>Best Script Per Type</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {Object.entries(scriptData.best_by_prospect_type).map(([type, info]) => (
+                      <div key={type} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '8px 12px', background: S.bg, borderRadius: S.radiusSm, border: `1px solid ${S.borderLight}`,
+                      }}>
+                        <div>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: S.text, textTransform: 'capitalize' }}>{type.replace(/_/g, ' ')}</span>
+                          <div style={{ fontSize: 11, color: S.textSecondary, marginTop: 1 }}>{info.script_title}</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: info.rate >= 50 ? S.green : info.rate >= 30 ? S.yellow : S.red }}>{info.rate}%</div>
+                          <div style={{ fontSize: 10, color: S.textMuted }}>{info.total} sends</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Best per channel */}
+              {Object.keys(scriptData.best_by_channel).length > 0 && (
+                <div style={{ background: S.surface, borderRadius: S.radius, padding: 20, border: `1px solid ${S.border}` }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 600, color: S.text, margin: '0 0 12px' }}>Best Script Per Channel</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {Object.entries(scriptData.best_by_channel).map(([channel, info]) => (
+                      <div key={channel} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '8px 12px', background: S.bg, borderRadius: S.radiusSm, border: `1px solid ${S.borderLight}`,
+                      }}>
+                        <div>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: S.text, textTransform: 'capitalize' }}>{channel}</span>
+                          <div style={{ fontSize: 11, color: S.textSecondary, marginTop: 1 }}>{info.script_title}</div>
+                        </div>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: info.rate >= 50 ? S.green : S.yellow }}>{info.rate}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Safouane vs Joep */}
+              {scriptData.person_performance.length > 0 && (
+                <div style={{ background: S.surface, borderRadius: S.radius, padding: 20, border: `1px solid ${S.border}` }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 600, color: S.text, margin: '0 0 12px' }}>Outreach Effectiveness</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {scriptData.person_performance.map(pp => (
+                      <div key={pp.person} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '10px 14px', background: S.bg, borderRadius: S.radiusSm, border: `1px solid ${S.borderLight}`,
+                      }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: S.text, textTransform: 'capitalize' }}>{pp.person}</div>
+                          {pp.best_script && (
+                            <div style={{ fontSize: 11, color: S.textSecondary, marginTop: 1 }}>
+                              Best: {pp.best_script} ({pp.best_rate}%)
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: S.accent }}>{pp.total}</div>
+                            <div style={{ fontSize: 9, color: S.textMuted }}>sent</div>
+                          </div>
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: S.green }}>{pp.replied}</div>
+                            <div style={{ fontSize: 9, color: S.textMuted }}>replies</div>
+                          </div>
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: pp.reply_rate >= 50 ? S.green : pp.reply_rate >= 30 ? S.yellow : S.red }}>{pp.reply_rate}%</div>
+                            <div style={{ fontSize: 9, color: S.textMuted }}>rate</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── REACTIVATION PIPELINE ── */}
       {reactData && (reactData.due_now.count > 0 || reactData.upcoming.count > 0 || reactData.stats.sent_last_30_days > 0) && (() => {
