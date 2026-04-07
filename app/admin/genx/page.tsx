@@ -10,7 +10,7 @@ function adminDb() {
   )
 }
 
-async function safeQuery(promise: Promise<{ data: unknown; error: unknown }>) {
+async function safeQuery(promise: PromiseLike<{ data: unknown; error: unknown }>) {
   try {
     const res = await promise
     return res.data
