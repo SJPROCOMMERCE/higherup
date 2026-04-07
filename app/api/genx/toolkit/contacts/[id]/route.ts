@@ -1,100 +1,64 @@
 import { getGenxSession } from '@/lib/genx-auth'
 import { genxDb } from '@/lib/genx-db'
-import { NextRequest } from 'next/server'
 
-function addDays(days: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() + days)
-  return d.toISOString()
-}
-
-function autoFollowupAt(status: string): string | null {
-  switch (status) {
-    case 'contacted':  return addDays(3)
-    case 'interested': return addDays(1)
-    case 'link_sent':  return addDays(2)
-    default: return null
-  }
-}
-
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getGenxSession()
   if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
   const body = await req.json()
-  const db = genxDb()
-  const now = new Date().toISOString()
+  const allowed = [
+    'name', 'channel', 'handle', 'status', 'notes', 'source',
+    'last_message_sent', 'last_objection', 'next_followup_at',
+    'last_contacted_at', 'last_replied_at', 'first_contacted_at',
+    'is_starred', 'is_archived', 'tags', 'followup_count',
+  ]
 
-  // Verify ownership
-  const { data: existing } = await db
+  const now = new Date().toISOString()
+  const update: Record<string, unknown> = { updated_at: now }
+
+  for (const key of allowed) {
+    if (key in body) update[key] = body[key]
+  }
+
+  // Auto-update last_contacted_at when status changes to something active
+  if (body.status && body.status !== 'prospect' && body.status !== 'lost') {
+    if (!('last_contacted_at' in body)) update.last_contacted_at = now
+  }
+
+  const db = genxDb()
+  const { data, error } = await db
     .from('lg_contacts')
-    .select('id, status, lg_id')
+    .update(update)
     .eq('id', id)
     .eq('lg_id', session.lgId)
+    .select()
     .single()
 
-  if (!existing) return Response.json({ error: 'Not found' }, { status: 404 })
-
-  const updates: Record<string, unknown> = { ...body, updated_at: now }
-
-  // Auto-update timestamps on status change
-  if (body.status && body.status !== existing.status) {
-    const newFollowup = autoFollowupAt(body.status)
-    if (newFollowup) updates.next_followup_at = newFollowup
-
-    if (['replied', 'interested'].includes(body.status)) {
-      updates.last_replied_at = now
-    }
-    if (!['prospect'].includes(body.status)) {
-      updates.last_contacted_at = now
-      if (!existing.status || existing.status === 'prospect') {
-        updates.first_contacted_at = now
-      }
-    }
+  if (error) {
+    console.error('[genx/toolkit/contacts/[id]] PATCH error:', error)
+    return Response.json({ error: error.message }, { status: 500 })
   }
 
-  const { data: contact, error } = await db
-    .from('lg_contacts')
-    .update(updates)
-    .eq('id', id)
-    .select('*')
-    .single()
-
-  if (error) return Response.json({ error: error.message }, { status: 500 })
-
-  // Log status change activity
-  if (body.status && body.status !== existing.status) {
-    await db.from('lg_contact_activities').insert({
-      contact_id: id,
-      lg_id: session.lgId,
-      activity_type: 'status_change',
-      note: `Status changed from ${existing.status} to ${body.status}`,
-    })
-  }
-
-  return Response.json({ contact })
+  return Response.json({ contact: data })
 }
 
-export async function DELETE(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getGenxSession()
   if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
   const db = genxDb()
-
   const { error } = await db
     .from('lg_contacts')
-    .delete()
+    .update({ is_archived: true, updated_at: new Date().toISOString() })
     .eq('id', id)
     .eq('lg_id', session.lgId)
 
-  if (error) return Response.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[genx/toolkit/contacts/[id]] DELETE error:', error)
+    return Response.json({ error: error.message }, { status: 500 })
+  }
+
   return Response.json({ ok: true })
 }

@@ -5,10 +5,10 @@ import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 
 const ITEMS = [
-  { href: '/genx/command', label: 'COMMAND', short: 'CMD' },
-  { href: '/genx/network', label: 'NETWORK', short: 'NET' },
-  { href: '/genx/toolkit', label: 'TOOLKIT', short: 'TK'  },
-  { href: '/genx/payouts', label: 'PAYOUTS', short: 'PAY' },
+  { href: '/genx/command', label: 'COMMAND', short: 'CMD'   },
+  { href: '/genx/network', label: 'NETWORK', short: 'NET'   },
+  { href: '/genx/toolkit', label: 'TOOLKIT', short: 'TK'    },
+  { href: '/genx/payouts', label: 'PAYOUTS', short: 'PAY'   },
 ]
 
 export default function GenxNav({ displayName, lgId }: { displayName: string; lgId: string }) {

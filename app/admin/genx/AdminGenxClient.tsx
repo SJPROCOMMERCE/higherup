@@ -1,141 +1,172 @@
 'use client'
 import { useState } from 'react'
+import DashboardTab from './tabs/DashboardTab'
+import ProspectsTab from './tabs/ProspectsTab'
+import LGsTab from './tabs/LGsTab'
+import CommunitiesTab from './tabs/CommunitiesTab'
+import ScorecardTab from './tabs/ScorecardTab'
 
-// Kolom namen uit genx-schema.md — lead_generators heeft joined_at, NIET created_at
-type LG = {
+// ── Shared types ──
+export type LG = {
   id: string; display_name: string; email: string | null; login_code: string
   referral_code: string; status: string; total_earned: number; total_vas: number
   active_vas: number; referral_count: number; joined_at: string | null
+  onboarding_status: string | null; lg_tier: string | null; community_id: string | null
+  recruiter_notes: string | null; last_active_at: string | null
 }
-type Payout = { id: string; lg_id: string; period_start: string; amount: number; status: string }
-
-const STATUS_COLORS: Record<string, string> = {
-  active: '#22C55E', pending: '#F59E0B', paused: '#888888', deactivated: '#EF4444'
+export type Prospect = {
+  id: string; name: string; email: string | null; phone: string | null
+  platform: string | null; handle: string | null; source: string; stage: string
+  stage_index: number; priority: string; follow_up_date: string | null
+  lost_reason: string | null; converted_lg_id: string | null; notes: string | null
+  tags: string[]; created_at: string; updated_at: string; converted_at: string | null
+  admin_communities?: { name: string } | null
+}
+export type Community = {
+  id: string; name: string; platform: string; url: string | null
+  description: string | null; member_count: number; prospect_count: number
+  lg_count: number; status: string; tags: string[]; notes: string | null
+  created_at: string; updated_at: string
+}
+export type Scorecard = {
+  id: string; score_date: string; calls_made: number; dms_sent: number
+  emails_sent: number; prospects_added: number; follow_ups_done: number
+  appointments_set: number; conversions: number; communities_posted: number
+  notes: string | null
+}
+export type Payout = { id: string; lg_id: string; period_start: string; amount: number; status: string }
+export type ProspectActivity = {
+  id: string; prospect_id: string; activity_type: string; description: string | null
+  old_stage: string | null; new_stage: string | null; created_at: string
+  admin_prospects?: { name: string } | null
 }
 
-export default function AdminGenxClient({ lgs, pendingPayouts }: { lgs: LG[]; pendingPayouts: Payout[] }) {
-  const [loading, setLoading] = useState<string | null>(null)
-  const [payRef, setPayRef] = useState<Record<string, string>>({})
+// ── Shared styles (light/white admin theme) ──
+export const S = {
+  bg: '#FFFFFF',
+  surface: '#F9FAFB',
+  surfaceHover: '#F3F4F6',
+  border: '#E5E7EB',
+  borderLight: '#F0F0F0',
+  text: '#111827',
+  textSecondary: '#6B7280',
+  textMuted: '#9CA3AF',
+  accent: '#2563EB',
+  accentLight: '#EFF6FF',
+  green: '#059669',
+  greenLight: '#ECFDF5',
+  red: '#DC2626',
+  redLight: '#FEF2F2',
+  yellow: '#D97706',
+  yellowLight: '#FFFBEB',
+  purple: '#7C3AED',
+  purpleLight: '#F5F3FF',
+  orange: '#EA580C',
+  orangeLight: '#FFF7ED',
+  radius: 10,
+  radiusSm: 6,
+  font: 'Inter, -apple-system, sans-serif',
+}
 
-  const totalActive = lgs.filter(l => l.status === 'active').length
-  const totalPending = lgs.filter(l => l.status === 'pending').length
-  const totalEarnings = lgs.reduce((s, l) => s + parseFloat(String(l.total_earned || 0)), 0)
-  const totalVAs = lgs.reduce((s, l) => s + (l.total_vas || 0), 0)
+const TABS = [
+  { key: 'dashboard', label: 'Dashboard' },
+  { key: 'prospects', label: 'Prospects' },
+  { key: 'lgs', label: 'Lead Generators' },
+  { key: 'communities', label: 'Communities' },
+  { key: 'scorecard', label: 'Scorecard' },
+] as const
 
-  async function action(lgId: string, type: 'approve' | 'pause' | 'deactivate') {
-    setLoading(lgId + type)
-    await fetch(`/api/admin/genx/${type}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lg_id: lgId }),
-    })
-    setLoading(null)
-    window.location.reload()
-  }
+type TabKey = typeof TABS[number]['key']
 
-  async function markPaid(payoutId: string, lgId: string) {
-    setLoading(payoutId)
-    await fetch('/api/admin/genx/pay', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ payout_id: payoutId, payment_reference: payRef[payoutId] || '' }),
-    })
-    setLoading(null)
-    window.location.reload()
-  }
+type Props = {
+  lgs: LG[]
+  prospects: Prospect[]
+  communities: Community[]
+  scorecards: Scorecard[]
+  pendingPayouts: Payout[]
+  dashboardData: {
+    kpis: Record<string, number | string>
+    pipeline: Record<string, number>
+    today_scorecard: Scorecard | null
+    recent_activities: ProspectActivity[]
+  } | null
+}
+
+export default function AdminGenxClient({ lgs: initialLGs, prospects: initialProspects, communities: initialCommunities, scorecards: initialScorecards, pendingPayouts, dashboardData }: Props) {
+  const [activeTab, setActiveTab] = useState<TabKey>('dashboard')
+  const [lgs, setLGs] = useState(initialLGs)
+  const [prospects, setProspects] = useState(initialProspects)
+  const [communities, setCommunities] = useState(initialCommunities)
+  const [scorecards, setScorecards] = useState(initialScorecards)
 
   return (
-    <div style={{ padding: 32, maxWidth: 1200, margin: '0 auto' }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 32 }}>GENX — Lead Generator Management</h1>
-
-      {/* Summary */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
-        {[
-          { label: 'Active LGs', value: totalActive },
-          { label: 'Pending Approval', value: totalPending },
-          { label: 'Total VAs Referred', value: totalVAs },
-          { label: 'Total LG Earnings', value: `$${totalEarnings.toFixed(2)}` },
-        ].map(card => (
-          <div key={card.label} style={{ background: '#F5F5F7', borderRadius: 12, padding: 20 }}>
-            <div style={{ fontSize: 12, color: '#86868B', marginBottom: 8 }}>{card.label}</div>
-            <div style={{ fontSize: 24, fontWeight: 700 }}>{card.value}</div>
-          </div>
-        ))}
+    <div style={{ minHeight: '100vh', background: S.bg, fontFamily: S.font }}>
+      {/* Header */}
+      <div style={{ borderBottom: `1px solid ${S.border}`, background: S.bg, padding: '20px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: S.text, margin: 0 }}>GENX CRM</h1>
+          <p style={{ fontSize: 13, color: S.textSecondary, margin: '4px 0 0' }}>Recruitment & Lead Generator Management</p>
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {TABS.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              style={{
+                padding: '8px 18px',
+                borderRadius: S.radius,
+                border: activeTab === tab.key ? `1px solid ${S.accent}` : `1px solid ${S.border}`,
+                background: activeTab === tab.key ? S.accentLight : S.bg,
+                color: activeTab === tab.key ? S.accent : S.textSecondary,
+                fontSize: 13,
+                fontWeight: activeTab === tab.key ? 600 : 500,
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Pending payouts */}
-      {pendingPayouts.length > 0 && (
-        <div style={{ marginBottom: 32 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Pending Payouts ({pendingPayouts.length})</h2>
-          <div style={{ background: '#fff', border: '1px solid #E5E5E5', borderRadius: 12, overflow: 'hidden' }}>
-            {pendingPayouts.map((p, i) => {
-              const lg = lgs.find(l => l.id === p.lg_id)
-              return (
-                <div key={p.id} style={{ padding: '16px 20px', borderBottom: i < pendingPayouts.length - 1 ? '1px solid #F0F0F0' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontWeight: 600 }}>{lg?.display_name || p.lg_id}</div>
-                    <div style={{ fontSize: 12, color: '#86868B' }}>{p.period_start}</div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                    <span style={{ fontSize: 18, fontWeight: 700, color: '#22C55E' }}>${parseFloat(String(p.amount)).toFixed(2)}</span>
-                    <input
-                      placeholder="Reference"
-                      value={payRef[p.id] || ''}
-                      onChange={e => setPayRef(prev => ({ ...prev, [p.id]: e.target.value }))}
-                      style={{ border: '1px solid #E5E5E5', borderRadius: 6, padding: '6px 10px', fontSize: 12, width: 140 }}
-                    />
-                    <button onClick={() => markPaid(p.id, p.lg_id)} disabled={loading === p.id} style={{
-                      background: '#22C55E', color: '#fff', border: 'none', borderRadius: 6,
-                      padding: '8px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                    }}>
-                      {loading === p.id ? '...' : 'Mark Paid'}
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* All LGs */}
-      <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>All Lead Generators ({lgs.length})</h2>
-      <div style={{ background: '#fff', border: '1px solid #E5E5E5', borderRadius: 12, overflow: 'hidden' }}>
-        {lgs.map((lg, i) => (
-          <div key={lg.id} style={{ padding: '16px 20px', borderBottom: i < lgs.length - 1 ? '1px solid #F0F0F0' : 'none' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 4 }}>
-                  <span style={{ fontWeight: 600, fontSize: 15 }}>{lg.display_name}</span>
-                  <span style={{ fontSize: 11, color: STATUS_COLORS[lg.status] || '#888', textTransform: 'uppercase', fontWeight: 600 }}>{lg.status}</span>
-                </div>
-                <div style={{ fontSize: 12, color: '#86868B' }}>
-                  {lg.email} · Code: <strong>{lg.login_code}</strong> · Ref: {lg.referral_code}
-                </div>
-                <div style={{ fontSize: 12, color: '#86868B', marginTop: 4 }}>
-                  {lg.total_vas} referred · {lg.active_vas} active · ${parseFloat(String(lg.total_earned || 0)).toFixed(2)} lifetime
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {lg.status === 'pending' && (
-                  <button onClick={() => action(lg.id, 'approve')} disabled={loading === lg.id + 'approve'} style={{
-                    background: '#22C55E', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                  }}>Approve</button>
-                )}
-                {lg.status === 'active' && (
-                  <button onClick={() => action(lg.id, 'pause')} disabled={loading === lg.id + 'pause'} style={{
-                    background: '#F5F5F7', color: '#1D1D1F', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 12, cursor: 'pointer',
-                  }}>Pause</button>
-                )}
-                {lg.status !== 'deactivated' && (
-                  <button onClick={() => action(lg.id, 'deactivate')} disabled={loading === lg.id + 'deactivate'} style={{
-                    background: '#FEF2F2', color: '#EF4444', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 12, cursor: 'pointer',
-                  }}>Deactivate</button>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
+      {/* Tab content */}
+      <div style={{ padding: '24px 32px', maxWidth: 1440, margin: '0 auto' }}>
+        {activeTab === 'dashboard' && (
+          <DashboardTab
+            dashboardData={dashboardData}
+            lgs={lgs}
+            pendingPayouts={pendingPayouts}
+            onRefresh={() => window.location.reload()}
+          />
+        )}
+        {activeTab === 'prospects' && (
+          <ProspectsTab
+            prospects={prospects}
+            communities={communities}
+            onUpdate={setProspects}
+          />
+        )}
+        {activeTab === 'lgs' && (
+          <LGsTab
+            lgs={lgs}
+            communities={communities}
+            pendingPayouts={pendingPayouts}
+            onUpdate={setLGs}
+          />
+        )}
+        {activeTab === 'communities' && (
+          <CommunitiesTab
+            communities={communities}
+            onUpdate={setCommunities}
+          />
+        )}
+        {activeTab === 'scorecard' && (
+          <ScorecardTab
+            scorecards={scorecards}
+            onUpdate={setScorecards}
+          />
+        )}
       </div>
     </div>
   )

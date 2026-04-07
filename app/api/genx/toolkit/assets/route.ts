@@ -6,7 +6,6 @@ export async function GET() {
   if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   const db = genxDb()
-
   const { data, error } = await db
     .from('genx_assets')
     .select('*')
@@ -14,9 +13,7 @@ export async function GET() {
     .order('sort_order', { ascending: true })
 
   if (error) {
-    if (error.message?.includes('does not exist')) {
-      return Response.json({ assets: [], migration_needed: true })
-    }
+    console.error('[genx/toolkit/assets] GET error:', error)
     return Response.json({ error: error.message }, { status: 500 })
   }
 
