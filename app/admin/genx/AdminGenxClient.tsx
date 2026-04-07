@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import DashboardTab from './tabs/DashboardTab'
 import ProspectsTab from './tabs/ProspectsTab'
 import LGsTab from './tabs/LGsTab'
@@ -42,6 +42,20 @@ export default function AdminGenxClient({ lgs: initialLGs, prospects: initialPro
   const [prospects, setProspects] = useState(initialProspects)
   const [communities, setCommunities] = useState(initialCommunities)
   const [scorecards, setScorecards] = useState(initialScorecards)
+  const [unrepliedCount, setUnrepliedCount] = useState(0)
+
+  // Tab title badge for unreplied count
+  useEffect(() => {
+    if (unrepliedCount > 0) {
+      document.title = `(${unrepliedCount}) GENX Admin`
+    } else {
+      document.title = 'GENX Admin'
+    }
+  }, [unrepliedCount])
+
+  const handleUnrepliedCount = useCallback((count: number) => {
+    setUnrepliedCount(count)
+  }, [])
 
   return (
     <div style={{ minHeight: '100vh', background: S.bg, fontFamily: S.font }}>
@@ -82,6 +96,7 @@ export default function AdminGenxClient({ lgs: initialLGs, prospects: initialPro
             lgs={lgs}
             pendingPayouts={pendingPayouts}
             onRefresh={() => window.location.reload()}
+            onUnrepliedCount={handleUnrepliedCount}
           />
         )}
         {activeTab === 'prospects' && (

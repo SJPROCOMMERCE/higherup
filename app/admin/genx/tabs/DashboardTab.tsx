@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { S, PIPELINE_STAGES, TERMINAL_STAGES, type LG, type Payout, type ProspectActivity, type Scorecard } from '../shared'
+import { S, PIPELINE_STAGES, TERMINAL_STAGES, type LG, type Payout, type ProspectActivity, type Scorecard, type ResponseSpeedData } from '../shared'
 
 type FunnelStep = {
   stage: string; count: number; reached: number
@@ -19,6 +19,13 @@ const STAGE_LOOKUP: Record<string, { label: string; color: string }> = {}
 for (const s of PIPELINE_STAGES) STAGE_LOOKUP[s.key] = { label: s.label, color: s.color }
 for (const s of TERMINAL_STAGES) STAGE_LOOKUP[s.key] = { label: s.label, color: s.color }
 
+function waitingColor(minutes: number): string {
+  if (minutes < 60) return S.green
+  if (minutes < 240) return S.yellow
+  if (minutes < 1440) return S.orange
+  return S.red
+}
+
 type Props = {
   dashboardData: {
     kpis: Record<string, number | string>
@@ -29,27 +36,49 @@ type Props = {
   lgs: LG[]
   pendingPayouts: Payout[]
   onRefresh: () => void
+  onUnrepliedCount?: (count: number) => void
 }
 
-export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRefresh }: Props) {
+export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRefresh, onUnrepliedCount }: Props) {
   const [payRef, setPayRef] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState<string | null>(null)
   const [funnel, setFunnel] = useState<FunnelResponse | null>(null)
   const [funnelLoading, setFunnelLoading] = useState(true)
+  const [speed, setSpeed] = useState<ResponseSpeedData | null>(null)
 
   const kpis = dashboardData?.kpis || {}
   const pipeline = dashboardData?.pipeline || {}
   const todayScore = dashboardData?.today_scorecard
   const recentActivities = dashboardData?.recent_activities || []
 
-  // Fetch funnel analytics data
+  // Fetch funnel + response speed data
   useEffect(() => {
     setFunnelLoading(true)
-    fetch('/api/admin/genx/funnel')
-      .then(r => r.json())
-      .then(data => { setFunnel(data); setFunnelLoading(false) })
-      .catch(() => setFunnelLoading(false))
-  }, [])
+    Promise.all([
+      fetch('/api/admin/genx/funnel').then(r => r.json()).catch(() => null),
+      fetch('/api/admin/genx/analytics/response-speed').then(r => r.json()).catch(() => null),
+    ]).then(([funnelData, speedData]) => {
+      setFunnel(funnelData)
+      setSpeed(speedData)
+      setFunnelLoading(false)
+      if (speedData?.unreplied?.count != null) {
+        onUnrepliedCount?.(speedData.unreplied.count)
+      }
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Poll unreplied count every 60s
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/admin/genx/analytics/response-speed')
+        const data = await res.json()
+        setSpeed(data)
+        onUnrepliedCount?.(data.unreplied?.count || 0)
+      } catch { /* ignore */ }
+    }, 60000)
+    return () => clearInterval(interval)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function markPaid(payoutId: string) {
     setLoading(payoutId)
@@ -73,17 +102,50 @@ export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRef
     onRefresh()
   }
 
-  // Max for server-side pipeline bar width
   const maxPipeline = Math.max(...PIPELINE_STAGES.map(s => pipeline[s.key] || 0), 1)
-
-  // Funnel max for funnel bars
   const maxReached = funnel ? Math.max(...funnel.steps.map(s => s.reached), 1) : 1
-
-  // Total stuck
   const totalStuck = funnel ? Object.values(funnel.stuck).reduce((a, b) => a + b, 0) : 0
+
+  // Trend chart max for bar heights
+  const trendMax = speed?.trend?.length ? Math.max(...speed.trend.map(t => t.avg_minutes), 1) : 1
 
   return (
     <div>
+      {/* ── UNREPLIED ALERT BANNER — always on top ── */}
+      {speed && speed.unreplied.count > 0 && (
+        <div style={{
+          background: S.redLight, border: '1px solid #FECACA', borderRadius: S.radius,
+          padding: '16px 20px', marginBottom: 20,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <span style={{ fontSize: 18 }}>⚠</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: S.red }}>
+              {speed.unreplied.count} PROSPECT{speed.unreplied.count > 1 ? 'S' : ''} REPLIED AND {speed.unreplied.count > 1 ? 'ARE' : 'IS'} WAITING
+            </span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {speed.unreplied.prospects.map(p => (
+              <div key={p.id} style={{
+                display: 'flex', alignItems: 'center', gap: 16, padding: '8px 14px',
+                background: '#fff', borderRadius: S.radiusSm, border: '1px solid #FECACA',
+              }}>
+                <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: S.text }}>{p.name}</div>
+                <div style={{
+                  fontSize: 12, fontWeight: 700,
+                  color: waitingColor(p.waiting_minutes),
+                }}>{p.waiting_display}</div>
+                {p.channel && (
+                  <div style={{
+                    fontSize: 10, fontWeight: 500, color: S.textSecondary,
+                    background: S.surface, padding: '2px 8px', borderRadius: 4, textTransform: 'capitalize',
+                  }}>{p.channel}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14, marginBottom: 24 }}>
         {[
@@ -99,6 +161,119 @@ export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRef
           </div>
         ))}
       </div>
+
+      {/* ── Response Speed Stats + Trend: Two columns ── */}
+      {speed && speed.speed_stats.total_replies > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>
+          {/* Speed Stats Card */}
+          <div style={{ background: S.surface, borderRadius: S.radius, padding: 20, border: `1px solid ${S.border}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, color: S.text, margin: 0 }}>Response Speed</h3>
+              <span style={{ fontSize: 11, color: S.textMuted }}>Last 30 days</span>
+            </div>
+
+            <div style={{ fontSize: 28, fontWeight: 700, color: speed.speed_stats.avg_minutes <= 60 ? S.green : speed.speed_stats.avg_minutes <= 240 ? S.yellow : S.red, marginBottom: 16 }}>
+              {speed.speed_stats.avg_display}
+              <span style={{ fontSize: 12, fontWeight: 500, color: S.textSecondary, marginLeft: 8 }}>average</span>
+            </div>
+
+            {/* Percentage bars */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+              {[
+                { label: 'Within 5 min', pct: speed.speed_stats.within_5min_pct, count: speed.speed_stats.within_5min, color: S.green },
+                { label: 'Within 1 hour', pct: speed.speed_stats.within_1hr_pct, count: speed.speed_stats.within_1hr, color: S.accent },
+                { label: 'Within 24 hours', pct: speed.speed_stats.within_24hr_pct, count: speed.speed_stats.within_24hr, color: S.yellow },
+              ].map(row => (
+                <div key={row.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 100, fontSize: 12, color: S.textSecondary }}>{row.label}</div>
+                  <div style={{ width: 40, fontSize: 12, fontWeight: 700, color: row.color, textAlign: 'right' }}>{row.pct}%</div>
+                  <div style={{ flex: 1, height: 18, background: S.bg, borderRadius: 4, overflow: 'hidden', border: `1px solid ${S.borderLight}` }}>
+                    <div style={{ width: `${row.pct}%`, height: '100%', background: row.color, borderRadius: 4, opacity: 0.7, transition: 'width 0.3s' }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {speed.speed_stats.expired_count > 0 && (
+              <div style={{ fontSize: 12, color: S.red, marginBottom: 12 }}>
+                Expired (never replied): <strong>{speed.speed_stats.expired_count}</strong>
+              </div>
+            )}
+
+            {/* Per person */}
+            {Object.keys(speed.per_person).length > 0 && (
+              <div style={{ borderTop: `1px solid ${S.borderLight}`, paddingTop: 12 }}>
+                {Object.entries(speed.per_person).map(([name, stats]) => (
+                  <div key={name} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '6px 0', fontSize: 12,
+                  }}>
+                    <span style={{ color: S.text, fontWeight: 500, textTransform: 'capitalize' }}>{name}</span>
+                    <span style={{ color: S.textSecondary }}>
+                      avg <strong style={{ color: stats.avg_minutes <= 60 ? S.green : stats.avg_minutes <= 240 ? S.yellow : S.red }}>
+                        {stats.avg_minutes < 60 ? `${stats.avg_minutes}m` : `${(stats.avg_minutes / 60).toFixed(1)}h`}
+                      </strong>
+                      <span style={{ marginLeft: 8, color: S.textMuted }}>{stats.count} replies</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Speed Trend Chart */}
+          <div style={{ background: S.surface, borderRadius: S.radius, padding: 20, border: `1px solid ${S.border}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, color: S.text, margin: 0 }}>Response Time Trend</h3>
+              <span style={{ fontSize: 11, color: S.textMuted }}>Last 8 weeks</span>
+            </div>
+
+            {speed.trend.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40, color: S.textMuted, fontSize: 13 }}>
+                Not enough data for trend yet.
+              </div>
+            ) : (
+              <div>
+                {/* Bar chart */}
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 160, padding: '0 4px' }}>
+                  {speed.trend.map(w => {
+                    const barHeight = Math.max((w.avg_minutes / trendMax) * 140, 8)
+                    const hours = w.avg_minutes / 60
+                    const barColor = hours < 2 ? S.green : hours < 4 ? S.yellow : S.red
+                    return (
+                      <div key={w.week} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                        <div style={{ fontSize: 10, fontWeight: 600, color: barColor }}>
+                          {hours < 1 ? `${w.avg_minutes}m` : `${hours.toFixed(1)}h`}
+                        </div>
+                        <div style={{
+                          width: '100%', height: barHeight, background: barColor,
+                          borderRadius: '4px 4px 0 0', opacity: 0.75, transition: 'height 0.3s',
+                        }} />
+                        <div style={{ fontSize: 9, color: S.textMuted, whiteSpace: 'nowrap' }}>
+                          {new Date(w.week).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Trend comparison */}
+                {speed.trend.length >= 2 && (() => {
+                  const recent = speed.trend[speed.trend.length - 1].avg_minutes
+                  const prev = speed.trend[speed.trend.length - 2].avg_minutes
+                  if (prev === 0) return null
+                  const change = Math.round(((prev - recent) / prev) * 100)
+                  return (
+                    <div style={{ marginTop: 12, fontSize: 12, color: change > 0 ? S.green : S.red, fontWeight: 500 }}>
+                      {change > 0 ? `${change}% faster` : `${Math.abs(change)}% slower`} than previous week
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Recruitment Funnel ── */}
       <div style={{ background: S.surface, borderRadius: S.radius, padding: 24, border: `1px solid ${S.border}`, marginBottom: 20 }}>
@@ -123,7 +298,6 @@ export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRef
         {funnelLoading ? (
           <div style={{ textAlign: 'center', padding: 40, color: S.textMuted, fontSize: 13 }}>Loading funnel data...</div>
         ) : !funnel ? (
-          /* Fallback: use server-side pipeline counts */
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {PIPELINE_STAGES.map(stage => {
               const count = pipeline[stage.key] || 0
@@ -143,7 +317,6 @@ export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRef
             })}
           </div>
         ) : (
-          /* Full funnel with conversion rates */
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {funnel.steps.map((step, i) => {
               const meta = STAGE_LOOKUP[step.stage] || { label: step.stage, color: S.textSecondary }
@@ -152,55 +325,37 @@ export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRef
 
               return (
                 <div key={step.stage}>
-                  {/* Conversion arrow between stages */}
                   {i > 0 && step.rate_from_previous !== null && (
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '3px 0 3px 122px', fontSize: 11,
-                    }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0 3px 122px', fontSize: 11 }}>
                       <svg width="12" height="12" viewBox="0 0 12 12" style={{ flexShrink: 0, opacity: 0.5 }}>
                         <path d="M6 2 L6 10 M3 7 L6 10 L9 7" stroke={isBottleneck ? S.red : S.textMuted} fill="none" strokeWidth="1.5" />
                       </svg>
                       <span style={{
                         color: isBottleneck ? S.red : step.rate_from_previous >= 60 ? S.green : step.rate_from_previous >= 30 ? S.yellow : S.red,
                         fontWeight: 600,
-                      }}>
-                        {step.rate_from_previous}%
-                      </span>
+                      }}>{step.rate_from_previous}%</span>
                       {step.avg_hours !== null && (
                         <span style={{ color: S.textMuted, fontWeight: 400 }}>
                           · avg {step.avg_hours < 24 ? `${step.avg_hours}h` : `${Math.round(step.avg_hours / 24)}d`}
                         </span>
                       )}
                       {isBottleneck && (
-                        <span style={{
-                          background: S.redLight, color: S.red, padding: '1px 8px',
-                          borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
-                        }}>BOTTLENECK</span>
+                        <span style={{ background: S.redLight, color: S.red, padding: '1px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: 0.5 }}>BOTTLENECK</span>
                       )}
                     </div>
                   )}
-
-                  {/* Stage bar */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{ width: 110, fontSize: 13, color: S.textSecondary, fontWeight: 500 }}>{meta.label}</div>
-                    <div style={{
-                      flex: 1, height: 32, background: S.bg, borderRadius: 6,
-                      overflow: 'hidden', border: `1px solid ${S.borderLight}`, position: 'relative',
-                    }}>
+                    <div style={{ flex: 1, height: 32, background: S.bg, borderRadius: 6, overflow: 'hidden', border: `1px solid ${S.borderLight}`, position: 'relative' }}>
                       <div style={{
                         width: `${Math.max(pct, step.reached > 0 ? 4 : 0)}%`,
-                        height: '100%', background: meta.color, borderRadius: 6,
-                        opacity: 0.75, transition: 'width 0.4s ease',
+                        height: '100%', background: meta.color, borderRadius: 6, opacity: 0.75, transition: 'width 0.4s ease',
                       }} />
-                      {/* Current count inside bar */}
                       {step.count > 0 && (
                         <div style={{
                           position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
                           fontSize: 11, fontWeight: 600, color: pct > 15 ? '#fff' : S.text, textShadow: pct > 15 ? '0 1px 2px rgba(0,0,0,0.2)' : 'none',
-                        }}>
-                          {step.count} now
-                        </div>
+                        }}>{step.count} now</div>
                       )}
                     </div>
                     <div style={{ width: 48, textAlign: 'right' }}>
@@ -211,19 +366,12 @@ export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRef
                 </div>
               )
             })}
-
-            {/* Terminal stages row */}
             <div style={{ display: 'flex', gap: 16, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${S.borderLight}` }}>
               {TERMINAL_STAGES.map(ts => (
-                <div key={ts.key} style={{
-                  display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px',
-                  background: S.bg, borderRadius: S.radiusSm, border: `1px solid ${S.borderLight}`,
-                }}>
+                <div key={ts.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px', background: S.bg, borderRadius: S.radiusSm, border: `1px solid ${S.borderLight}` }}>
                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: ts.color }} />
                   <span style={{ fontSize: 12, color: S.textSecondary }}>{ts.label}</span>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: ts.color }}>
-                    {funnel.terminal?.[ts.key] || 0}
-                  </span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: ts.color }}>{funnel.terminal?.[ts.key] || 0}</span>
                 </div>
               ))}
             </div>
@@ -233,18 +381,13 @@ export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRef
 
       {/* ── Bottleneck Alert ── */}
       {funnel?.bottleneck && (
-        <div style={{
-          background: S.redLight, border: `1px solid #FECACA`, borderRadius: S.radius,
-          padding: '16px 20px', marginBottom: 20, display: 'flex', alignItems: 'flex-start', gap: 14,
-        }}>
+        <div style={{ background: S.redLight, border: '1px solid #FECACA', borderRadius: S.radius, padding: '16px 20px', marginBottom: 20, display: 'flex', alignItems: 'flex-start', gap: 14 }}>
           <div style={{ fontSize: 22, lineHeight: 1 }}>⚠</div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: S.red, marginBottom: 4 }}>
               Bottleneck Detected: {STAGE_LOOKUP[funnel.bottleneck.from]?.label || funnel.bottleneck.from} → {STAGE_LOOKUP[funnel.bottleneck.to]?.label || funnel.bottleneck.to}
             </div>
-            <div style={{ fontSize: 13, color: '#991B1B', lineHeight: 1.5 }}>
-              {funnel.bottleneck.message}
-            </div>
+            <div style={{ fontSize: 13, color: '#991B1B', lineHeight: 1.5 }}>{funnel.bottleneck.message}</div>
             <div style={{ fontSize: 12, color: S.textSecondary, marginTop: 6 }}>
               Only <strong>{funnel.bottleneck.rate}%</strong> make it through · <strong>{funnel.bottleneck.drop_off}%</strong> drop-off
             </div>
@@ -252,10 +395,9 @@ export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRef
         </div>
       )}
 
-      {/* ── Velocity & Stuck: Two columns ── */}
+      {/* ── Velocity & Stuck ── */}
       {funnel && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>
-          {/* Velocity Metrics */}
           <div style={{ background: S.surface, borderRadius: S.radius, padding: 20, border: `1px solid ${S.border}` }}>
             <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 14, color: S.text }}>Stage Velocity</h3>
             <p style={{ fontSize: 12, color: S.textSecondary, marginBottom: 14, marginTop: -8 }}>Average time between stages</p>
@@ -266,43 +408,26 @@ export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRef
                 const prevMeta = prevIdx >= 0 ? (STAGE_LOOKUP[funnel.steps[prevIdx].stage] || { label: '?', color: S.textSecondary }) : null
                 const hours = step.avg_hours!
                 const days = hours / 24
-                const isGood = days < 2
-                const isBad = days > 7
-
                 return (
-                  <div key={step.stage} style={{
-                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
-                    background: S.bg, borderRadius: S.radiusSm, border: `1px solid ${S.borderLight}`,
-                  }}>
-                    <div style={{ flex: 1, fontSize: 12, color: S.textSecondary }}>
-                      {prevMeta?.label} → {meta.label}
-                    </div>
-                    <div style={{
-                      fontSize: 13, fontWeight: 700,
-                      color: isBad ? S.red : isGood ? S.green : S.yellow,
-                    }}>
+                  <div key={step.stage} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: S.bg, borderRadius: S.radiusSm, border: `1px solid ${S.borderLight}` }}>
+                    <div style={{ flex: 1, fontSize: 12, color: S.textSecondary }}>{prevMeta?.label} → {meta.label}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: days > 7 ? S.red : days < 2 ? S.green : S.yellow }}>
                       {hours < 24 ? `${hours}h` : `${days.toFixed(1)}d`}
                     </div>
                   </div>
                 )
               })}
               {funnel.steps.slice(1).filter(s => s.avg_hours !== null).length === 0 && (
-                <div style={{ textAlign: 'center', padding: 24, color: S.textMuted, fontSize: 13 }}>
-                  No velocity data yet — need at least 2 prospects to have moved between stages.
-                </div>
+                <div style={{ textAlign: 'center', padding: 24, color: S.textMuted, fontSize: 13 }}>No velocity data yet.</div>
               )}
             </div>
           </div>
 
-          {/* Stuck Prospects */}
           <div style={{ background: S.surface, borderRadius: S.radius, padding: 20, border: `1px solid ${S.border}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <h3 style={{ fontSize: 15, fontWeight: 600, color: S.text, margin: 0 }}>Stuck Prospects</h3>
               {totalStuck > 0 && (
-                <span style={{
-                  background: S.redLight, color: S.red, padding: '3px 10px',
-                  borderRadius: 12, fontSize: 12, fontWeight: 700,
-                }}>{totalStuck} stuck</span>
+                <span style={{ background: S.redLight, color: S.red, padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 700 }}>{totalStuck} stuck</span>
               )}
             </div>
             <p style={{ fontSize: 12, color: S.textSecondary, marginBottom: 14, marginTop: -8 }}>Prospects on same stage for 7+ days</p>
@@ -320,26 +445,20 @@ export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRef
                       <div style={{ width: 8, height: 8, borderRadius: '50%', background: stage.color }} />
                       <span style={{ fontSize: 13, color: S.text, fontWeight: 500 }}>{stage.label}</span>
                     </div>
-                    <span style={{
-                      fontSize: 14, fontWeight: 700,
-                      color: count >= 3 ? S.red : S.yellow,
-                    }}>{count}</span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: count >= 3 ? S.red : S.yellow }}>{count}</span>
                   </div>
                 )
               }).filter(Boolean)}
               {totalStuck === 0 && (
-                <div style={{ textAlign: 'center', padding: 24, color: S.textMuted, fontSize: 13 }}>
-                  No stuck prospects — pipeline is flowing well!
-                </div>
+                <div style={{ textAlign: 'center', padding: 24, color: S.textMuted, fontSize: 13 }}>No stuck prospects — pipeline is flowing well!</div>
               )}
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Two-column: Today's Activity + Pending Actions ── */}
+      {/* ── Today's Activity + Pending Actions ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>
-        {/* Today's Scorecard */}
         <div style={{ background: S.surface, borderRadius: S.radius, padding: 20, border: `1px solid ${S.border}` }}>
           <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16, color: S.text }}>Today&apos;s Activity</h3>
           {todayScore ? (
@@ -367,28 +486,20 @@ export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRef
           )}
         </div>
 
-        {/* Pending Actions */}
         <div style={{ background: S.surface, borderRadius: S.radius, padding: 20, border: `1px solid ${S.border}` }}>
           <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16, color: S.text }}>Pending Actions</h3>
-
-          {/* Pending approvals */}
           {lgs.filter(l => l.status === 'pending').map(lg => (
             <div key={lg.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: S.yellowLight, borderRadius: S.radiusSm, marginBottom: 8, border: '1px solid #FDE68A' }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: S.text }}>{lg.display_name}</div>
                 <div style={{ fontSize: 11, color: S.textSecondary }}>Wacht op goedkeuring</div>
               </div>
-              <button
-                onClick={() => action(lg.id, 'approve')}
-                disabled={loading === lg.id + 'approve'}
-                style={{ background: S.green, color: '#fff', border: 'none', borderRadius: S.radiusSm, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-              >
+              <button onClick={() => action(lg.id, 'approve')} disabled={loading === lg.id + 'approve'}
+                style={{ background: S.green, color: '#fff', border: 'none', borderRadius: S.radiusSm, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                 {loading === lg.id + 'approve' ? '...' : 'Approve'}
               </button>
             </div>
           ))}
-
-          {/* Pending payouts */}
           {pendingPayouts.map(p => {
             const lg = lgs.find(l => l.id === p.lg_id)
             return (
@@ -398,31 +509,23 @@ export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRef
                   <div style={{ fontSize: 11, color: S.textSecondary }}>${parseFloat(String(p.amount)).toFixed(2)} — {p.period_start}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input
-                    placeholder="Ref"
-                    value={payRef[p.id] || ''}
-                    onChange={e => setPayRef(prev => ({ ...prev, [p.id]: e.target.value }))}
-                    style={{ border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '4px 8px', fontSize: 11, width: 100 }}
-                  />
-                  <button
-                    onClick={() => markPaid(p.id)}
-                    disabled={loading === p.id}
-                    style={{ background: S.green, color: '#fff', border: 'none', borderRadius: S.radiusSm, padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
-                  >
+                  <input placeholder="Ref" value={payRef[p.id] || ''} onChange={e => setPayRef(prev => ({ ...prev, [p.id]: e.target.value }))}
+                    style={{ border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '4px 8px', fontSize: 11, width: 100 }} />
+                  <button onClick={() => markPaid(p.id)} disabled={loading === p.id}
+                    style={{ background: S.green, color: '#fff', border: 'none', borderRadius: S.radiusSm, padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
                     {loading === p.id ? '...' : 'Paid'}
                   </button>
                 </div>
               </div>
             )
           })}
-
           {lgs.filter(l => l.status === 'pending').length === 0 && pendingPayouts.length === 0 && (
             <div style={{ textAlign: 'center', padding: 30, color: S.textMuted, fontSize: 13 }}>No pending actions</div>
           )}
         </div>
       </div>
 
-      {/* ── Recent Activity Feed (full width) ── */}
+      {/* ── Recent Activity Feed ── */}
       <div style={{ background: S.surface, borderRadius: S.radius, padding: 20, border: `1px solid ${S.border}` }}>
         <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16, color: S.text }}>Recent Activity</h3>
         <div style={{ maxHeight: 400, overflowY: 'auto' }}>
@@ -432,17 +535,29 @@ export default function DashboardTab({ dashboardData, lgs, pendingPayouts, onRef
             <div key={a.id} style={{ display: 'flex', gap: 10, padding: '8px 0', borderBottom: `1px solid ${S.borderLight}` }}>
               <div style={{
                 width: 8, height: 8, borderRadius: '50%', marginTop: 5, flexShrink: 0,
-                background: a.activity_type === 'status_change' ? S.accent :
+                background: a.direction === 'inbound' ? S.orange :
+                  a.activity_type === 'status_change' ? S.accent :
                   a.activity_type === 'call' ? S.green :
                   a.activity_type === 'dm' ? S.purple : S.textMuted,
               }} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, color: S.text }}>
+                  {a.direction === 'inbound' && <span style={{ color: S.orange, fontWeight: 600, marginRight: 4 }}>← IN</span>}
+                  {a.direction === 'outbound' && <span style={{ color: S.accent, fontWeight: 600, marginRight: 4 }}>→ OUT</span>}
                   <strong>{a.admin_prospects?.name || 'Prospect'}</strong>{' — '}
                   {a.description || a.activity_type}
+                  {a.response_time_minutes != null && (
+                    <span style={{
+                      marginLeft: 6, fontSize: 11, fontWeight: 600,
+                      color: a.response_time_minutes <= 5 ? S.green : a.response_time_minutes <= 60 ? S.yellow : S.red,
+                    }}>
+                      ⏱ {a.response_time_minutes < 60 ? `${a.response_time_minutes}m` : `${(a.response_time_minutes / 60).toFixed(1)}h`}
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: 11, color: S.textMuted, marginTop: 2 }}>
                   {new Date(a.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  {a.sender && <span style={{ marginLeft: 6 }}>· {a.sender}</span>}
                 </div>
               </div>
             </div>
