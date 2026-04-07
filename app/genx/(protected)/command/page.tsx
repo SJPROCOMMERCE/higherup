@@ -5,6 +5,7 @@ import { getCurrentBillingMonth, getPreviousBillingMonth } from '@/lib/usage-tra
 import ActionFeed from './ActionFeed'
 import WeeklyTargets from './WeeklyTargets'
 import WelcomeBanner from './WelcomeBanner'
+import CommandReferralLink from './CommandReferralLink'
 
 const S = {
   label: { fontSize: 11, fontWeight: 500, color: '#555555', textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 8, display: 'block' },
@@ -29,6 +30,7 @@ export default async function CommandPage() {
     ? new Date(lgJoinedAt) > new Date(Date.now() - 24 * 60 * 60 * 1000)
     : false
 
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://higherup.me'
   const db = genxDb()
   const lgId = session.lgId
   const currentMonth = getCurrentBillingMonth()
@@ -37,7 +39,7 @@ export default async function CommandPage() {
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
   const [lgRes, thisRes, lastRes, twoRes, activeRes, actionsRes, signupsRes, allReferralsRes] = await Promise.all([
-    db.from('lead_generators').select('total_earned, total_vas, active_vas').eq('id', lgId).single(),
+    db.from('lead_generators').select('total_earned, total_vas, active_vas, referral_code').eq('id', lgId).single(),
     db.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', toMonthDate(currentMonth)),
     db.from('lg_earnings').select('amount, products').eq('lg_id', lgId).eq('billing_month', toMonthDate(lastMonth)),
     db.from('lg_earnings').select('amount').eq('lg_id', lgId).eq('billing_month', toMonthDate(twoAgo)),
@@ -59,6 +61,8 @@ export default async function CommandPage() {
   const activeCount   = (activeRes.data||[]).length
   const total         = (lgRes.data?.total_vas as number) || 0
   const lifetime      = parseFloat(String(lgRes.data?.total_earned || 0))
+  const referralCode  = (lgRes.data?.referral_code as string) || ''
+  const referralLink  = referralCode ? `${appUrl}/ref/${referralCode}` : ''
   const momGrowth     = lastEarnings > 0 ? ((thisEarnings - lastEarnings) / lastEarnings * 100) : 0
   const avgGrowth     = (thisEarnings - twoEarnings) / 2
   const projection    = Math.max(0, thisEarnings + avgGrowth)
@@ -100,9 +104,12 @@ export default async function CommandPage() {
       {/* Lifetime */}
       <div style={{ marginBottom: 48 }}>
         <span style={S.label}>Lifetime Earnings</span>
-        <div style={{ ...S.mono, fontSize: 60, fontWeight: 700, color: '#FFFFFF', lineHeight: 1 }}>
+        <div style={{ ...S.mono, fontSize: 60, fontWeight: 700, color: '#FFFFFF', lineHeight: 1, marginBottom: 16 }}>
           {fmt(lifetime)}
         </div>
+        {referralLink && (
+          <CommandReferralLink link={referralLink} />
+        )}
       </div>
 
       {/* Action Feed */}

@@ -7,7 +7,6 @@ import { usePathname, useRouter } from 'next/navigation'
 const ITEMS = [
   { href: '/genx/command', label: 'COMMAND', short: 'CMD'   },
   { href: '/genx/network', label: 'NETWORK', short: 'NET'   },
-  { href: '/genx/recruit', label: 'RECRUIT', short: 'REC'   },
   { href: '/genx/toolkit', label: 'TOOLKIT', short: 'TK'    },
   { href: '/genx/payouts', label: 'PAYOUTS', short: 'PAY'   },
 ]

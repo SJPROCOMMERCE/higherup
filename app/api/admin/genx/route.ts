@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { genxDb, toMonthDate } from '@/lib/genx-db'
 import { getCurrentBillingMonth } from '@/lib/usage-tracker'
 import { cookies } from 'next/headers'
 import crypto from 'crypto'
@@ -22,11 +22,12 @@ export async function GET() {
   if (!await checkAdmin()) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   const currentMonth = getCurrentBillingMonth()
+  const db = genxDb()
 
   const [lgsRes, earningsRes, payoutsRes] = await Promise.all([
-    supabase.from('lead_generators').select('*').order('created_at', { ascending: false }),
-    supabase.from('lg_earnings').select('lg_id, amount').eq('billing_month', currentMonth),
-    supabase.from('lg_payouts').select('lg_id, amount').eq('status', 'pending'),
+    db.from('lead_generators').select('*').order('joined_at', { ascending: false }),
+    db.from('lg_earnings').select('lg_id, amount').eq('billing_month', toMonthDate(currentMonth)),
+    db.from('lg_payouts').select('lg_id, amount').eq('status', 'pending'),
   ])
 
   const lgs     = lgsRes.data || []

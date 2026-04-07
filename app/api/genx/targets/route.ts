@@ -1,5 +1,5 @@
 import { getGenxSession } from '@/lib/genx-auth'
-import { supabase } from '@/lib/supabase'
+import { genxDb } from '@/lib/genx-db'
 
 export async function PATCH(req: Request) {
   const session = await getGenxSession()
@@ -11,6 +11,6 @@ export async function PATCH(req: Request) {
     if (body[key] !== undefined && typeof body[key] === 'number') update[key] = body[key]
   }
   if (Object.keys(update).length === 0) return Response.json({ error: 'No valid fields' }, { status: 400 })
-  await supabase.from('lead_generators').update({ ...update, updated_at: new Date().toISOString() }).eq('id', session.lgId)
+  await genxDb().from('lead_generators').update({ ...update, updated_at: new Date().toISOString() }).eq('id', session.lgId)
   return Response.json({ ok: true })
 }

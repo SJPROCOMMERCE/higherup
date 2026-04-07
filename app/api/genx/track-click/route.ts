@@ -1,5 +1,5 @@
 import { createHash } from 'crypto'
-import { supabase } from '@/lib/supabase'
+import { genxDb } from '@/lib/genx-db'
 import { NextRequest } from 'next/server'
 
 export async function POST(request: NextRequest) {
@@ -10,7 +10,8 @@ export async function POST(request: NextRequest) {
   const ua = request.headers.get('user-agent') || ''
   const ipHash = createHash('sha256').update(ip).digest('hex')
 
-  const { data: lg } = await supabase
+  const db = genxDb()
+  const { data: lg } = await db
     .from('lead_generators')
     .select('id')
     .eq('referral_code', referral_code)
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
 
   // Dedup: max 1 click per IP per 24h per code
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-  const { data: recent } = await supabase
+  const { data: recent } = await db
     .from('referral_clicks')
     .select('id')
     .eq('lg_id', lg.id)
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
     .maybeSingle()
 
   if (!recent) {
-    await supabase.from('referral_clicks').insert({
+    await db.from('referral_clicks').insert({
       lg_id:         lg.id,
       referral_code,
       ip_hash:       ipHash,

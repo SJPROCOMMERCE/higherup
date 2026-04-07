@@ -1,12 +1,12 @@
 import { cookies } from 'next/headers'
-import { supabase } from '@/lib/supabase'
+import { genxDb } from '@/lib/genx-db'
 import { signSession, getSessionCookieOptions, SESSION_COOKIE } from '@/lib/genx-auth'
 
 export async function POST(request: Request) {
   const { login_code } = await request.json() as { login_code?: string }
   if (!login_code) return Response.json({ error: 'Code required' }, { status: 400 })
 
-  const { data: lg } = await supabase
+  const { data: lg } = await genxDb()
     .from('lead_generators')
     .select('id, status, display_name')
     .eq('login_code', login_code.trim().toUpperCase())
