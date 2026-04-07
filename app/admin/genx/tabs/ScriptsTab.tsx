@@ -1,10 +1,46 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { S, SCRIPT_CATEGORIES, PROSPECT_TYPES, type OutreachScript } from '../shared'
+import { S, SCRIPT_CATEGORIES, PROSPECT_TYPES, LOSS_REASONS, getLossReasonLabel, type OutreachScript, type ReactivationTemplate } from '../shared'
 
 const CHANNELS = ['general', 'whatsapp', 'facebook', 'instagram', 'linkedin', 'telegram', 'email']
 
+type SubTab = 'outreach' | 'templates'
+
 export default function ScriptsTab() {
+  const [subTab, setSubTab] = useState<SubTab>('outreach')
+
+  return (
+    <div>
+      {/* Sub-tab bar */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 20 }}>
+        {([
+          { key: 'outreach' as const, label: 'Outreach Scripts' },
+          { key: 'templates' as const, label: 'Reactivation Templates' },
+        ]).map(t => (
+          <button key={t.key} onClick={() => setSubTab(t.key)}
+            style={{
+              padding: '10px 24px', fontSize: 13, fontWeight: subTab === t.key ? 600 : 500,
+              borderRadius: `${S.radiusSm}px`, cursor: 'pointer',
+              border: subTab === t.key ? `1px solid ${S.accent}` : `1px solid ${S.border}`,
+              background: subTab === t.key ? S.accentLight : S.bg,
+              color: subTab === t.key ? S.accent : S.textSecondary,
+              transition: 'all 0.15s',
+            }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {subTab === 'outreach' && <OutreachScriptsPanel />}
+      {subTab === 'templates' && <ReactivationTemplatesPanel />}
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════
+// OUTREACH SCRIPTS PANEL
+// ══════════════════════════════════════════════════════
+function OutreachScriptsPanel() {
   const [scripts, setScripts] = useState<OutreachScript[]>([])
   const [loading, setLoading] = useState(true)
   const [filterCat, setFilterCat] = useState('all')
@@ -12,34 +48,24 @@ export default function ScriptsTab() {
   const [filterTarget, setFilterTarget] = useState('all')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
-
-  // New script modal
   const [showNew, setShowNew] = useState(false)
   const [newForm, setNewForm] = useState({ title: '', content: '', category: 'first_contact', channel: 'general', target_prospect_type: 'any', description: '', created_by: '' })
-
-  // Edit state
   const [editId, setEditId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState({ title: '', content: '', category: '', channel: '', target_prospect_type: '', description: '' })
 
-  useEffect(() => {
-    loadScripts()
-  }, [])
+  useEffect(() => { loadScripts() }, [])
 
   async function loadScripts() {
     setLoading(true)
     const res = await fetch('/api/admin/genx/outreach-scripts')
-    if (res.ok) {
-      const data = await res.json()
-      setScripts(data.scripts || [])
-    }
+    if (res.ok) { const data = await res.json(); setScripts(data.scripts || []) }
     setLoading(false)
   }
 
   async function createScript() {
     if (!newForm.title.trim() || !newForm.content.trim()) return
     const res = await fetch('/api/admin/genx/outreach-scripts', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newForm),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newForm),
     })
     if (res.ok) {
       setShowNew(false)
@@ -50,8 +76,7 @@ export default function ScriptsTab() {
 
   async function saveEdit(id: string) {
     await fetch(`/api/admin/genx/outreach-scripts/${id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(editForm),
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editForm),
     })
     setEditId(null)
     loadScripts()
@@ -75,7 +100,6 @@ export default function ScriptsTab() {
     return true
   })
 
-  // Group by category
   const grouped: Record<string, OutreachScript[]> = {}
   for (const s of filtered) {
     if (!grouped[s.category]) grouped[s.category] = []
@@ -114,17 +138,9 @@ export default function ScriptsTab() {
 
       {/* New Script Modal */}
       {showNew && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.5)',
-        }} onClick={() => setShowNew(false)}>
-          <div style={{
-            background: '#fff', borderRadius: 14, padding: 28, width: 520,
-            boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-          }} onClick={e => e.stopPropagation()}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }} onClick={() => setShowNew(false)}>
+          <div style={{ background: '#fff', borderRadius: 14, padding: 28, width: 520, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
             <h3 style={{ fontSize: 16, fontWeight: 700, color: S.text, margin: '0 0 16px' }}>New Outreach Script</h3>
-
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
               <select value={newForm.category} onChange={e => setNewForm({ ...newForm, category: e.target.value })}
                 style={{ border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '8px 12px', fontSize: 13, background: S.bg }}>
@@ -139,17 +155,13 @@ export default function ScriptsTab() {
                 {PROSPECT_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
               </select>
             </div>
-
             <input placeholder="Script title *" value={newForm.title} onChange={e => setNewForm({ ...newForm, title: e.target.value })}
               style={{ width: '100%', border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '8px 12px', fontSize: 13, marginBottom: 12, boxSizing: 'border-box' }} />
-
             <textarea value={newForm.content} onChange={e => setNewForm({ ...newForm, content: e.target.value })} rows={5}
               placeholder="The actual message content *"
               style={{ width: '100%', border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '8px 12px', fontSize: 13, marginBottom: 12, fontFamily: S.font, boxSizing: 'border-box', resize: 'vertical' }} />
-
             <input placeholder="Description / notes (optional)" value={newForm.description} onChange={e => setNewForm({ ...newForm, description: e.target.value })}
               style={{ width: '100%', border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '8px 12px', fontSize: 13, marginBottom: 12, boxSizing: 'border-box' }} />
-
             <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
               <span style={{ fontSize: 12, color: S.textSecondary, lineHeight: '32px' }}>Created by:</span>
               {['safouane', 'joep'].map(s => (
@@ -163,21 +175,16 @@ export default function ScriptsTab() {
                   }}>{s}</button>
               ))}
             </div>
-
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
               <button onClick={() => setShowNew(false)}
-                style={{ padding: '8px 20px', fontSize: 13, borderRadius: S.radiusSm, border: `1px solid ${S.border}`, background: S.bg, color: S.textSecondary, cursor: 'pointer' }}>
-                Cancel
-              </button>
+                style={{ padding: '8px 20px', fontSize: 13, borderRadius: S.radiusSm, border: `1px solid ${S.border}`, background: S.bg, color: S.textSecondary, cursor: 'pointer' }}>Cancel</button>
               <button onClick={createScript} disabled={!newForm.title.trim() || !newForm.content.trim()}
                 style={{
-                  padding: '8px 20px', fontSize: 13, fontWeight: 600, borderRadius: S.radiusSm,
-                  border: 'none', cursor: newForm.title && newForm.content ? 'pointer' : 'not-allowed',
+                  padding: '8px 20px', fontSize: 13, fontWeight: 600, borderRadius: S.radiusSm, border: 'none',
+                  cursor: newForm.title && newForm.content ? 'pointer' : 'not-allowed',
                   background: newForm.title && newForm.content ? S.accent : S.border,
                   color: newForm.title && newForm.content ? '#fff' : S.textMuted,
-                }}>
-                Save Script
-              </button>
+                }}>Save Script</button>
             </div>
           </div>
         </div>
@@ -194,13 +201,10 @@ export default function ScriptsTab() {
                 <h3 style={{ fontSize: 14, fontWeight: 700, color: S.text, margin: 0, textTransform: 'uppercase' }}>{catLabel(cat)}</h3>
                 <span style={{ fontSize: 12, color: S.textMuted }}>{catScripts.length} scripts</span>
               </div>
-
               <div style={{ background: S.surface, borderRadius: S.radius, border: `1px solid ${S.border}`, overflow: 'hidden' }}>
                 {catScripts.map((s, i) => (
                   <div key={s.id} style={{ borderBottom: i < catScripts.length - 1 ? `1px solid ${S.borderLight}` : 'none' }}>
-                    {/* Row header */}
-                    <div
-                      onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}
+                    <div onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}
                       style={{
                         display: 'grid', gridTemplateColumns: '3fr 80px 80px 60px 60px 80px',
                         padding: '12px 16px', cursor: 'pointer', alignItems: 'center',
@@ -226,22 +230,15 @@ export default function ScriptsTab() {
                           setEditId(s.id)
                           setEditForm({ title: s.title, content: s.content, category: s.category, channel: s.channel, target_prospect_type: s.target_prospect_type, description: s.description || '' })
                         }}
-                          style={{ fontSize: 11, color: S.textSecondary, background: 'transparent', border: 'none', cursor: 'pointer' }}>
-                          Edit
-                        </button>
+                          style={{ fontSize: 11, color: S.textSecondary, background: 'transparent', border: 'none', cursor: 'pointer' }}>Edit</button>
                       </div>
                     </div>
-
-                    {/* Expanded: show full content */}
                     {expandedId === s.id && editId !== s.id && (
                       <div style={{ padding: '0 16px 16px', background: S.accentLight }}>
                         <div style={{
                           background: '#fff', borderRadius: S.radiusSm, padding: '12px 16px',
-                          fontSize: 13, color: S.text, lineHeight: 1.7, whiteSpace: 'pre-wrap',
-                          border: `1px solid ${S.borderLight}`,
-                        }}>
-                          {s.content}
-                        </div>
+                          fontSize: 13, color: S.text, lineHeight: 1.7, whiteSpace: 'pre-wrap', border: `1px solid ${S.borderLight}`,
+                        }}>{s.content}</div>
                         <div style={{ display: 'flex', gap: 12, marginTop: 10, fontSize: 11, color: S.textMuted }}>
                           <span>Used {s.times_used}x</span>
                           <span>{s.times_replied} replies</span>
@@ -249,15 +246,11 @@ export default function ScriptsTab() {
                           {s.created_by && <span>By {s.created_by}</span>}
                           {!s.is_default && (
                             <button onClick={() => deleteScript(s.id)}
-                              style={{ color: S.red, background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 11 }}>
-                              Delete
-                            </button>
+                              style={{ color: S.red, background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 11 }}>Delete</button>
                           )}
                         </div>
                       </div>
                     )}
-
-                    {/* Edit mode */}
                     {editId === s.id && (
                       <div style={{ padding: '12px 16px', background: S.yellowLight }}>
                         <input value={editForm.title} onChange={e => setEditForm({ ...editForm, title: e.target.value })}
@@ -289,10 +282,279 @@ export default function ScriptsTab() {
               </div>
             </div>
           ))}
-
           {filtered.length === 0 && (
             <div style={{ textAlign: 'center', padding: 40, color: S.textMuted, fontSize: 13 }}>
               No scripts found. Create one with the + New Script button.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════
+// REACTIVATION TEMPLATES PANEL
+// ══════════════════════════════════════════════════════
+function ReactivationTemplatesPanel() {
+  const [templates, setTemplates] = useState<ReactivationTemplate[]>([])
+  const [loading, setLoading] = useState(true)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [editId, setEditId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({ title: '', content: '', description: '', best_channel: '', expected_reply_rate: '', days_after_loss: 30 })
+  const [showNew, setShowNew] = useState(false)
+  const [newForm, setNewForm] = useState({ loss_reason: 'wants_fixed_fee', title: '', content: '', description: '', best_channel: 'whatsapp', expected_reply_rate: '', days_after_loss: 30, sort_order: 0 })
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  useEffect(() => { loadTemplates() }, [])
+
+  async function loadTemplates() {
+    setLoading(true)
+    const res = await fetch('/api/admin/genx/reactivation-templates')
+    if (res.ok) { const data = await res.json(); setTemplates(data.templates || []) }
+    setLoading(false)
+  }
+
+  async function createTemplate() {
+    if (!newForm.title.trim() || !newForm.content.trim()) return
+    const res = await fetch('/api/admin/genx/reactivation-templates', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newForm),
+    })
+    if (res.ok) {
+      setShowNew(false)
+      setNewForm({ loss_reason: 'wants_fixed_fee', title: '', content: '', description: '', best_channel: 'whatsapp', expected_reply_rate: '', days_after_loss: 30, sort_order: 0 })
+      loadTemplates()
+    }
+  }
+
+  async function saveEdit(id: string) {
+    await fetch(`/api/admin/genx/reactivation-templates/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editForm),
+    })
+    setEditId(null)
+    loadTemplates()
+  }
+
+  async function deleteTemplate(id: string) {
+    await fetch(`/api/admin/genx/reactivation-templates/${id}`, { method: 'DELETE' })
+    loadTemplates()
+  }
+
+  async function copyContent(id: string, content: string) {
+    await navigator.clipboard.writeText(content)
+    setCopiedId(id)
+    setTimeout(() => setCopiedId(null), 2000)
+  }
+
+  // Preview: replace placeholders
+  function preview(content: string): string {
+    return content
+      .replace(/\[name\]/g, 'Maria')
+      .replace(/\[X\]/g, '47')
+      .replace(/\[Y\]/g, '1,200')
+      .replace(/\[community name\]/g, 'VA Masters PH')
+  }
+
+  // Group by loss reason
+  const grouped: Record<string, ReactivationTemplate[]> = {}
+  for (const t of templates) {
+    if (!grouped[t.loss_reason]) grouped[t.loss_reason] = []
+    grouped[t.loss_reason].push(t)
+  }
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div style={{ fontSize: 12, color: S.textMuted }}>
+          {templates.length} templates across {Object.keys(grouped).length} loss reasons
+        </div>
+        <button onClick={() => setShowNew(true)}
+          style={{ background: S.purple, color: '#fff', border: 'none', borderRadius: S.radiusSm, padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+          + New Template
+        </button>
+      </div>
+
+      {/* New Template Modal */}
+      {showNew && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }} onClick={() => setShowNew(false)}>
+          <div style={{ background: '#fff', borderRadius: 14, padding: 28, width: 520, maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: S.text, margin: '0 0 16px' }}>New Reactivation Template</h3>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+              <div>
+                <label style={{ fontSize: 11, color: S.textMuted, display: 'block', marginBottom: 4 }}>Loss Reason</label>
+                <select value={newForm.loss_reason} onChange={e => setNewForm({ ...newForm, loss_reason: e.target.value })}
+                  style={{ width: '100%', border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '8px 12px', fontSize: 13, background: S.bg }}>
+                  {LOSS_REASONS.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: S.textMuted, display: 'block', marginBottom: 4 }}>Days After Loss</label>
+                <input type="number" value={newForm.days_after_loss} onChange={e => setNewForm({ ...newForm, days_after_loss: parseInt(e.target.value) || 0 })}
+                  style={{ width: '100%', border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '8px 12px', fontSize: 13, boxSizing: 'border-box' }} />
+              </div>
+            </div>
+
+            <input placeholder="Template title *" value={newForm.title} onChange={e => setNewForm({ ...newForm, title: e.target.value })}
+              style={{ width: '100%', border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '8px 12px', fontSize: 13, marginBottom: 12, boxSizing: 'border-box' }} />
+
+            <textarea value={newForm.content} onChange={e => setNewForm({ ...newForm, content: e.target.value })} rows={5}
+              placeholder="Message content. Use [name], [X], [Y] as placeholders *"
+              style={{ width: '100%', border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '8px 12px', fontSize: 13, marginBottom: 12, fontFamily: S.font, boxSizing: 'border-box', resize: 'vertical' }} />
+
+            {/* Preview */}
+            {newForm.content && (
+              <div style={{ background: S.purpleLight, borderRadius: S.radiusSm, padding: '10px 14px', marginBottom: 12, border: `1px solid ${S.purple}20` }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: S.purple, marginBottom: 4 }}>PREVIEW</div>
+                <div style={{ fontSize: 12, color: S.text, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{preview(newForm.content)}</div>
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
+              <div>
+                <label style={{ fontSize: 11, color: S.textMuted, display: 'block', marginBottom: 4 }}>Best Channel</label>
+                <select value={newForm.best_channel} onChange={e => setNewForm({ ...newForm, best_channel: e.target.value })}
+                  style={{ width: '100%', border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '8px 12px', fontSize: 13, background: S.bg }}>
+                  {CHANNELS.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: S.textMuted, display: 'block', marginBottom: 4 }}>Expected Reply Rate</label>
+                <input placeholder="e.g. ~15%" value={newForm.expected_reply_rate} onChange={e => setNewForm({ ...newForm, expected_reply_rate: e.target.value })}
+                  style={{ width: '100%', border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '8px 12px', fontSize: 13, boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: S.textMuted, display: 'block', marginBottom: 4 }}>Description</label>
+                <input placeholder="Internal note" value={newForm.description} onChange={e => setNewForm({ ...newForm, description: e.target.value })}
+                  style={{ width: '100%', border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '8px 12px', fontSize: 13, boxSizing: 'border-box' }} />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button onClick={() => setShowNew(false)}
+                style={{ padding: '8px 20px', fontSize: 13, borderRadius: S.radiusSm, border: `1px solid ${S.border}`, background: S.bg, color: S.textSecondary, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={createTemplate} disabled={!newForm.title.trim() || !newForm.content.trim()}
+                style={{
+                  padding: '8px 20px', fontSize: 13, fontWeight: 600, borderRadius: S.radiusSm, border: 'none',
+                  cursor: newForm.title && newForm.content ? 'pointer' : 'not-allowed',
+                  background: newForm.title && newForm.content ? S.purple : S.border,
+                  color: newForm.title && newForm.content ? '#fff' : S.textMuted,
+                }}>Save Template</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Template Library grouped by loss reason */}
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 40, color: S.textMuted, fontSize: 13 }}>Loading templates...</div>
+      ) : (
+        <div>
+          {Object.entries(grouped).map(([reason, reasonTemplates]) => (
+            <div key={reason} style={{ marginBottom: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: S.text, margin: 0 }}>{getLossReasonLabel(reason)}</h3>
+                <span style={{ fontSize: 12, color: S.textMuted }}>{reasonTemplates.length} template{reasonTemplates.length > 1 ? 's' : ''}</span>
+              </div>
+
+              <div style={{ background: S.surface, borderRadius: S.radius, border: `1px solid ${S.border}`, overflow: 'hidden' }}>
+                {reasonTemplates.map((t, i) => (
+                  <div key={t.id} style={{ borderBottom: i < reasonTemplates.length - 1 ? `1px solid ${S.borderLight}` : 'none' }}>
+                    {/* Row header */}
+                    <div
+                      onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
+                      style={{
+                        display: 'grid', gridTemplateColumns: '3fr 100px 100px 80px 80px',
+                        padding: '12px 16px', cursor: 'pointer', alignItems: 'center',
+                        background: expandedId === t.id ? S.purpleLight : S.bg,
+                      }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: S.text }}>{t.title}</div>
+                        {t.description && <div style={{ fontSize: 11, color: S.textMuted, marginTop: 1 }}>{t.description}</div>}
+                      </div>
+                      <div style={{ fontSize: 12, color: S.purple, fontWeight: 600 }}>Day {t.days_after_loss}</div>
+                      <div style={{ fontSize: 11, color: S.textSecondary, textTransform: 'capitalize' }}>{t.best_channel || '—'}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: S.green }}>{t.expected_reply_rate || '—'}</div>
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                        <button onClick={e => { e.stopPropagation(); copyContent(t.id, t.content) }}
+                          style={{ fontSize: 11, color: copiedId === t.id ? S.green : S.purple, background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: 500 }}>
+                          {copiedId === t.id ? 'Copied!' : 'Copy'}
+                        </button>
+                        <button onClick={e => {
+                          e.stopPropagation()
+                          setEditId(t.id)
+                          setEditForm({ title: t.title, content: t.content, description: t.description || '', best_channel: t.best_channel || '', expected_reply_rate: t.expected_reply_rate || '', days_after_loss: t.days_after_loss })
+                        }}
+                          style={{ fontSize: 11, color: S.textSecondary, background: 'transparent', border: 'none', cursor: 'pointer' }}>Edit</button>
+                      </div>
+                    </div>
+
+                    {/* Expanded: content + preview */}
+                    {expandedId === t.id && editId !== t.id && (
+                      <div style={{ padding: '0 16px 16px', background: S.purpleLight }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                          <div>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: S.textMuted, marginBottom: 4 }}>ORIGINAL</div>
+                            <div style={{
+                              background: '#fff', borderRadius: S.radiusSm, padding: '12px 16px',
+                              fontSize: 13, color: S.text, lineHeight: 1.7, whiteSpace: 'pre-wrap', border: `1px solid ${S.borderLight}`,
+                            }}>{t.content}</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: S.purple, marginBottom: 4 }}>PREVIEW (placeholders replaced)</div>
+                            <div style={{
+                              background: '#fff', borderRadius: S.radiusSm, padding: '12px 16px',
+                              fontSize: 13, color: S.text, lineHeight: 1.7, whiteSpace: 'pre-wrap', border: `1px solid ${S.purple}20`,
+                            }}>{preview(t.content)}</div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 12, marginTop: 10, fontSize: 11, color: S.textMuted }}>
+                          <span>Sent after {t.days_after_loss} days</span>
+                          {t.best_channel && <span>Best via {t.best_channel}</span>}
+                          {t.expected_reply_rate && <span>Expected {t.expected_reply_rate} reply rate</span>}
+                          <button onClick={() => deleteTemplate(t.id)}
+                            style={{ color: S.red, background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 11 }}>Delete</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Edit mode */}
+                    {editId === t.id && (
+                      <div style={{ padding: '12px 16px', background: S.yellowLight }}>
+                        <input value={editForm.title} onChange={e => setEditForm({ ...editForm, title: e.target.value })}
+                          style={{ width: '100%', border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '6px 10px', fontSize: 13, marginBottom: 8, boxSizing: 'border-box' }} />
+                        <textarea value={editForm.content} onChange={e => setEditForm({ ...editForm, content: e.target.value })} rows={4}
+                          style={{ width: '100%', border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '6px 10px', fontSize: 13, marginBottom: 8, fontFamily: S.font, boxSizing: 'border-box', resize: 'vertical' }} />
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
+                          <input type="number" value={editForm.days_after_loss} onChange={e => setEditForm({ ...editForm, days_after_loss: parseInt(e.target.value) || 0 })}
+                            placeholder="Days" style={{ border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '6px 10px', fontSize: 12 }} />
+                          <select value={editForm.best_channel} onChange={e => setEditForm({ ...editForm, best_channel: e.target.value })}
+                            style={{ border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '6px 10px', fontSize: 12, background: S.bg }}>
+                            <option value="">Channel</option>
+                            {CHANNELS.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                          <input value={editForm.expected_reply_rate} onChange={e => setEditForm({ ...editForm, expected_reply_rate: e.target.value })}
+                            placeholder="e.g. ~15%" style={{ border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '6px 10px', fontSize: 12 }} />
+                          <input value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })}
+                            placeholder="Description" style={{ border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '6px 10px', fontSize: 12 }} />
+                        </div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button onClick={() => setEditId(null)}
+                            style={{ padding: '6px 14px', fontSize: 12, borderRadius: S.radiusSm, border: `1px solid ${S.border}`, background: S.bg, color: S.textSecondary, cursor: 'pointer' }}>Cancel</button>
+                          <button onClick={() => saveEdit(t.id)}
+                            style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, borderRadius: S.radiusSm, border: 'none', background: S.purple, color: '#fff', cursor: 'pointer' }}>Save</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          {templates.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 40, color: S.textMuted, fontSize: 13 }}>
+              No reactivation templates found. Create one with the + New Template button.
             </div>
           )}
         </div>
