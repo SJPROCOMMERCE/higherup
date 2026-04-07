@@ -31,7 +31,7 @@ export default async function AdminGenxPage() {
     todayScorecardRes,
   ] = await Promise.all([
     db.from('lead_generators')
-      .select('id, display_name, login_code, email, phone, status, referral_code, joined_at, source, onboarding_status, lg_tier, community_id, recruiter_notes, last_active_at')
+      .select('*')
       .order('joined_at', { ascending: false }),
     db.from('referral_tracking').select('lg_id, status'),
     db.from('lg_earnings').select('lg_id, amount'),
@@ -61,13 +61,13 @@ export default async function AdminGenxPage() {
   }
 
   const lgs = (lgsRes.data || []).map(lg => ({
-    id:                lg.id as string,
-    display_name:      lg.display_name as string,
-    login_code:        lg.login_code as string,
+    id:                (lg.id as string) || '',
+    display_name:      (lg.display_name as string) || '',
+    login_code:        (lg.login_code as string) || '',
     email:             (lg.email as string) || null,
-    status:            lg.status as string,
-    referral_code:     lg.referral_code as string,
-    joined_at:         (lg.joined_at as string) || null,
+    status:            (lg.status as string) || 'pending',
+    referral_code:     (lg.referral_code as string) || '',
+    joined_at:         (lg.joined_at as string) || (lg.created_at as string) || null,
     total_vas:         totalVasMap[lg.id as string]  || 0,
     active_vas:        activeVasMap[lg.id as string] || 0,
     total_earned:      Math.round((earnedMap[lg.id as string] || 0) * 100) / 100,
